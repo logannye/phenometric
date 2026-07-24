@@ -374,3 +374,104 @@ describe("extractAmbientFaceMetrics", () => {
     }
   });
 });
+
+describe("blink events", () => {
+  /** Blinks only the named side; the other lid stays open throughout. */
+  function unilateralBlinkFrames(side: "left" | "right"): AmbientFacialFrame[] {
+    return ambientFaceFrames(60_000, 30, (frame) => {
+      const closed =
+        frame.tMs % 10_000 >= 1_000 && frame.tMs % 10_000 < 1_100;
+      return {
+        eyeAperture: {
+          left: side === "left" && closed ? 0.1 : 0.3,
+          right: side === "right" && closed ? 0.1 : 0.3
+        }
+      };
+    });
+  }
+
+  it("records a blink per eye with its kinematics", () => {
+    const result = extractAmbientFaceMetrics(
+      ambientFaceFrames(),
+      OPTIONS
+    );
+    const blinks = result.events?.blinks ?? [];
+    expect(blinks.length).toBeGreaterThan(0);
+    for (const blink of blinks) {
+      expect(["left", "right"]).toContain(blink.side);
+      expect(blink.openReference).toBeCloseTo(0.3, 6);
+      expect(blink.lidApertureMinimum).toBeCloseTo(0.1, 6);
+      // Travel is 0.2 of a 0.3 reference.
+      expect(blink.depth).toBeCloseTo(2 / 3, 3);
+      expect(blink.closingVelocity).toBeGreaterThan(0);
+      expect(blink.openingVelocity).toBeGreaterThan(0);
+      expect(blink.onsetMs).toBeLessThanOrEqual(blink.peakMs);
+      expect(blink.peakMs).toBeLessThanOrEqual(blink.offsetMs);
+    }
+    // Both eyes closed together, so each conjugate blink yields two records.
+    expect(blinks.filter((b) => b.side === "left").length).toBe(
+      blinks.filter((b) => b.side === "right").length
+    );
+  });
+
+  it.each(["left", "right"] as const)(
+    "sees a %s-only closure the bilateral rule could not",
+    (side) => {
+      // The former detector required BOTH eyes below threshold on one frame, so
+      // a unilateral closure produced nothing at all -- the case a facial palsy
+      // actually presents, and the one the instrument most needs to see.
+      const result = extractAmbientFaceMetrics(
+        unilateralBlinkFrames(side),
+        OPTIONS
+      );
+      const blinks = result.events?.blinks ?? [];
+      expect(blinks.length).toBeGreaterThan(0);
+      expect(blinks.every((blink) => blink.side === side)).toBe(true);
+    }
+  );
+
+  it("keeps the published bilateral rate counting only conjugate blinks", () => {
+    // The rate metric is explicitly bilateral. A unilateral closure must become
+    // an event without inflating it, or the per-eye rewrite would silently
+    // change what an existing published number means.
+    const unilateral = extractAmbientFaceMetrics(
+      unilateralBlinkFrames("left"),
+      OPTIONS
+    );
+    const rate = unilateral.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.blink_rate.bilateral"
+    );
+    expect(rate?.evidence.blinkCount).toBe(0);
+
+    const bilateral = extractAmbientFaceMetrics(
+      ambientFaceFrames(),
+      OPTIONS
+    );
+    const bilateralRate = bilateral.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.blink_rate.bilateral"
+    );
+    expect(bilateralRate?.evidence.blinkCount).toBe(6);
+  });
+
+  it("reports a shallower depth for an incomplete closure", () => {
+    // Lagophthalmos is incomplete lid closure. Depth is the parameter that
+    // carries it; a count cannot.
+    const incomplete = ambientFaceFrames(60_000, 30, (frame) => {
+      const closed =
+        frame.tMs % 10_000 >= 1_000 && frame.tMs % 10_000 < 1_100;
+      return {
+        eyeAperture: {
+          left: closed ? 0.17 : 0.3,
+          right: closed ? 0.1 : 0.3
+        }
+      };
+    });
+    const result = extractAmbientFaceMetrics(incomplete, OPTIONS);
+    const blinks = result.events?.blinks ?? [];
+    const left = blinks.filter((blink) => blink.side === "left");
+    const right = blinks.filter((blink) => blink.side === "right");
+    expect(left.length).toBeGreaterThan(0);
+    expect(right.length).toBeGreaterThan(0);
+    expect(left[0].depth).toBeLessThan(right[0].depth);
+  });
+});

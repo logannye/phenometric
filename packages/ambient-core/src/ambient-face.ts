@@ -10,6 +10,10 @@ import {
   summarizeExpressions,
   synkinesisIndex
 } from "./expression-events.js";
+import type {
+  BlinkEventRecord,
+  SubjectSide
+} from "./kinematic-events.js";
 import {
   measuredOutcome,
   sortedUnique,
@@ -610,75 +614,180 @@ function p95Gaps(bins: readonly FacialBin[]): number {
   return gaps.length > 0 ? percentile(gaps, 0.95) : Number.POSITIVE_INFINITY;
 }
 
-function detectBlinks(
-  bins: readonly FacialBin[]
-): { count: number; perBinCounts: number[] } {
-  const leftReference = percentile(
-    bins.flatMap((bin) => bin.frames.map((frame) => frame.eyeAperture!.left)),
+/** One eye's blink, plus the bin it peaked in so per-bin rates survive. */
+interface BinnedBlink extends BlinkEventRecord {
+  binIndex: number;
+}
+
+/**
+ * Blink detection for a single eye.
+ *
+ * Previously both eyes had to be below threshold on the same frame to register
+ * anything, which cannot see a unilateral closure at all -- and unilateral
+ * incomplete closure is the finding a facial palsy actually produces. Running
+ * the machine per eye removes that blind spot as a consequence of the shape
+ * rather than as a special case.
+ *
+ * The phases are kept because they dissociate: a reduced rate is hypomimia, a
+ * shallow depth is orbicularis weakness, a slow reopening is fatigable. One
+ * waveform, three findings, none of them recoverable from a count.
+ */
+function detectBlinksForEye(
+  bins: readonly FacialBin[],
+  side: SubjectSide,
+  apertureOf: (frame: AmbientFacialFrame) => number
+): BinnedBlink[] {
+  const openReference = percentile(
+    bins.flatMap((bin) => bin.frames.map(apertureOf)),
     0.9
   );
-  const rightReference = percentile(
-    bins.flatMap((bin) => bin.frames.map((frame) => frame.eyeAperture!.right)),
-    0.9
-  );
-  const perBinCounts = bins.map(() => 0);
-  let count = 0;
-  let closureStartedAt: number | null = null;
+  if (!(openReference > 0)) return [];
+  const closureThreshold = openReference * AMBIENT_BLINK_CLOSURE_FRACTION;
+  const recoveryThreshold = openReference * AMBIENT_BLINK_RECOVERY_FRACTION;
+
+  const events: BinnedBlink[] = [];
+  let closure:
+    | {
+        binIndex: number;
+        startMs: number;
+        /** Last frame above the recovery threshold: the true onset of movement. */
+        onsetMs: number;
+        peakMs: number;
+        minimum: number;
+        frameCount: number;
+        closedDwellMs: number;
+      }
+    | null = null;
   let suppressUntilRecovery = false;
   let lastAcceptedAt = Number.NEGATIVE_INFINITY;
+  let lastOpenMs: number | null = null;
   let previousFrame: AmbientFacialFrame | null = null;
   let previousBinIndex: number | null = null;
 
+  const reset = (): void => {
+    closure = null;
+    suppressUntilRecovery = false;
+    previousFrame = null;
+    lastOpenMs = null;
+  };
+
   for (let binIndex = 0; binIndex < bins.length; binIndex += 1) {
     const bin = bins[binIndex];
-    const contiguousBin =
-      previousBinIndex === null || bin.index === previousBinIndex + 1;
-    if (!contiguousBin) {
-      closureStartedAt = null;
-      suppressUntilRecovery = false;
-      previousFrame = null;
-    }
+    if (previousBinIndex !== null && bin.index !== previousBinIndex + 1) reset();
     for (const frame of bin.frames) {
       if (
         previousFrame &&
         frame.tMs - previousFrame.tMs > AMBIENT_BLINK_MAX_P95_GAP_MS
       ) {
-        closureStartedAt = null;
-        suppressUntilRecovery = false;
+        reset();
       }
-      const left = frame.eyeAperture!.left;
-      const right = frame.eyeAperture!.right;
-      const closed =
-        left <= leftReference * AMBIENT_BLINK_CLOSURE_FRACTION &&
-        right <= rightReference * AMBIENT_BLINK_CLOSURE_FRACTION;
-      const recovered =
-        left >= leftReference * AMBIENT_BLINK_RECOVERY_FRACTION &&
-        right >= rightReference * AMBIENT_BLINK_RECOVERY_FRACTION;
+      const aperture = apertureOf(frame);
+      const closed = aperture <= closureThreshold;
+      const recovered = aperture >= recoveryThreshold;
+
       if (suppressUntilRecovery) {
         if (recovered) suppressUntilRecovery = false;
-      } else if (closureStartedAt === null) {
+      } else if (closure === null) {
         if (closed && frame.tMs - lastAcceptedAt >= AMBIENT_BLINK_REFRACTORY_MS) {
-          closureStartedAt = frame.tMs;
+          closure = {
+            binIndex,
+            startMs: frame.tMs,
+            // Falling back to the closure frame keeps onset defined when the
+            // window opens mid-blink; the phases are then conservative rather
+            // than absent.
+            onsetMs: lastOpenMs ?? frame.tMs,
+            peakMs: frame.tMs,
+            minimum: aperture,
+            frameCount: 1,
+            closedDwellMs: 0
+          };
         }
       } else {
-        const elapsed = frame.tMs - closureStartedAt;
+        const elapsed = frame.tMs - closure.startMs;
+        closure.frameCount += 1;
+        if (aperture < closure.minimum) {
+          closure.minimum = aperture;
+          closure.peakMs = frame.tMs;
+        }
+        if (closed && previousFrame) {
+          closure.closedDwellMs += frame.tMs - previousFrame.tMs;
+        }
         if (elapsed > AMBIENT_BLINK_MAX_RECOVERY_MS) {
-          closureStartedAt = null;
+          closure = null;
           suppressUntilRecovery = true;
         } else if (recovered) {
           if (elapsed >= AMBIENT_BLINK_MIN_CLOSURE_MS) {
-            count += 1;
-            perBinCounts[binIndex] += 1;
+            const travel = openReference - closure.minimum;
+            const closingMs = closure.peakMs - closure.onsetMs;
+            const openingMs = frame.tMs - closure.peakMs;
+            events.push({
+              side,
+              binIndex: closure.binIndex,
+              onsetMs: closure.onsetMs,
+              peakMs: closure.peakMs,
+              offsetMs: frame.tMs,
+              openReference,
+              lidApertureMinimum: closure.minimum,
+              // Clamped: an aperture above the open reference on a noisy frame
+              // would otherwise read as negative depth.
+              depth: Math.min(1, Math.max(0, travel / openReference)),
+              closingVelocity:
+                closingMs > 0 ? (travel / closingMs) * 1_000 : 0,
+              openingVelocity:
+                openingMs > 0 ? (travel / openingMs) * 1_000 : 0,
+              closedDwellMs: closure.closedDwellMs,
+              frameCount: closure.frameCount
+            });
             lastAcceptedAt = frame.tMs;
           }
-          closureStartedAt = null;
+          closure = null;
         }
       }
+      if (recovered) lastOpenMs = frame.tMs;
       previousFrame = frame;
     }
     previousBinIndex = bin.index;
   }
-  return { count, perBinCounts };
+  return events;
+}
+
+/** Every blink from both eyes, ordered by the moment of maximum closure. */
+function detectBlinkEvents(bins: readonly FacialBin[]): BinnedBlink[] {
+  return [
+    ...detectBlinksForEye(bins, "left", (frame) => frame.eyeAperture!.left),
+    ...detectBlinksForEye(bins, "right", (frame) => frame.eyeAperture!.right)
+  ].sort((a, b) => a.peakMs - b.peakMs || (a.side === "left" ? -1 : 1));
+}
+
+/**
+ * Bilateral blink counts, from per-eye events whose closures overlap in time.
+ *
+ * The published rate metric is explicitly bilateral, so it keeps counting
+ * conjugate blinks and is unchanged by the per-eye rewrite. A unilateral
+ * closure now exists as an event without inflating that count.
+ */
+function detectBlinks(
+  bins: readonly FacialBin[]
+): { count: number; perBinCounts: number[]; events: BinnedBlink[] } {
+  const events = detectBlinkEvents(bins);
+  const perBinCounts = bins.map(() => 0);
+  const rights = events.filter((event) => event.side === "right");
+  const paired = new Set<BinnedBlink>();
+  let count = 0;
+  for (const left of events.filter((event) => event.side === "left")) {
+    const match = rights.find(
+      (right) =>
+        !paired.has(right) &&
+        right.onsetMs <= left.offsetMs &&
+        left.onsetMs <= right.offsetMs
+    );
+    if (match) {
+      paired.add(match);
+      count += 1;
+      perBinCounts[left.binIndex] += 1;
+    }
+  }
+  return { count, perBinCounts, events };
 }
 
 export function extractAmbientFaceMetrics(
@@ -696,6 +805,10 @@ export function extractAmbientFaceMetrics(
     )
     .sort((left, right) => left.tMs - right.tMs || left.sequence - right.sequence);
   const ignoredFrameCount = frames.length - inRange.length;
+  // Tier-2 records, collected as the detectors run and returned alongside the
+  // outcomes. An outcome carries one value by construction, so a series cannot
+  // travel inside it.
+  const blinkEvents: BlinkEventRecord[] = [];
   const screening = screenBins(inRange, options);
   const evidence = evidenceFor(inRange, screening.bins);
   const failure = commonFailure(screening, options);
@@ -817,6 +930,9 @@ export function extractAmbientFaceMetrics(
     );
   } else {
     const blinks = detectBlinks(screening.bins);
+    blinkEvents.push(
+      ...blinks.events.map(({ binIndex: _binIndex, ...event }) => event)
+    );
     const blinkEvidence = evidenceFor(inRange, screening.bins, {
       frontalExposureMs,
       blinkCount: blinks.count
@@ -1059,6 +1175,7 @@ export function extractAmbientFaceMetrics(
       if (!outcome) throw new Error(`Missing ambient face outcome ${code}.`);
       return outcome;
     }),
-    ignoredFrameCount
+    ignoredFrameCount,
+    events: { blinks: blinkEvents }
   };
 }

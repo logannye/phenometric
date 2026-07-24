@@ -1,3 +1,4 @@
+import type { SessionEventRecords } from "./kinematic-events.js";
 import type {
   FacialKinematicsFrameV1,
   VoiceSignalFrameV1
@@ -243,6 +244,18 @@ export interface AmbientExtractionResult<
 > {
   outcomes: Outcome[];
   ignoredFrameCount: number;
+  /**
+   * Tier-2 kinematic records for whatever this extractor detects.
+   *
+   * Returned alongside the outcomes rather than folded into them: an outcome
+   * carries one value and one dispersion by construction, so an event series
+   * cannot travel inside it. These stay provider-side and are what makes a
+   * measure defined later computable from a session already captured.
+   *
+   * An absent array means the detector did not run. An empty one means it ran
+   * and found nothing, which is a different statement.
+   */
+  events?: Partial<SessionEventRecords>;
 }
 
 export interface AmbientSessionExtractionInput {
