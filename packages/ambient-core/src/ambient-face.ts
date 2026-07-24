@@ -449,8 +449,39 @@ function evidenceFor(
           })
     ),
     sourceWindowRefs: bins.map((bin) => bin.sourceWindowRef),
+    // Worst accepted bin per gate, so the report can re-verify each threshold
+    // on the statistic the screener enforced rather than skipping it. Minima
+    // for `minimum*` gates, maxima for `maximum*` ones.
+    ...(bins.length > 0
+      ? {
+          cadenceHz: Math.min(...bins.map((bin) => bin.cadenceHz)),
+          dataPerBinMs: Math.min(...bins.map((bin) => bin.durationMs)),
+          samplesPerBin: Math.min(...bins.map((bin) => bin.frames.length)),
+          binSpanMs: Math.min(...bins.map((bin) => bin.actualSpanMs)),
+          p95FrameGapMs: p95Gaps(bins),
+          maximumFrameGapMs: maximumGap(bins)
+        }
+      : {}),
     ...overrides
   };
+}
+
+/**
+ * Largest inter-frame gap across accepted bins. Zero when no bin holds two
+ * frames, which is the correct floor: a gap that was never observed cannot
+ * exceed a ceiling.
+ */
+function maximumGap(bins: readonly FacialBin[]): number {
+  let largest = 0;
+  for (const bin of bins) {
+    for (let index = 1; index < bin.frames.length; index += 1) {
+      largest = Math.max(
+        largest,
+        bin.frames[index].tMs - bin.frames[index - 1].tMs
+      );
+    }
+  }
+  return largest;
 }
 
 function dispersion(values: readonly number[]): number | null {

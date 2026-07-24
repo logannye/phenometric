@@ -103,7 +103,21 @@ const ALGORITHM_PARAMETER_REQUIREMENTS = new Set([
   "minimumCouplingElevation"
 ]);
 
-function evidenceFactFor(
+/**
+ * Exported for the pack-coverage test, which asserts that every requirement the
+ * pack declares is either listed here as an algorithm parameter or resolvable
+ * by {@link evidenceFactFor}. Without that pairing a new requirement can be
+ * published and never checked.
+ */
+export const ALGORITHM_PARAMETER_REQUIREMENT_KEYS: ReadonlySet<string> =
+  ALGORITHM_PARAMETER_REQUIREMENTS;
+
+/**
+ * Exported for the pack-coverage test. A requirement the pack declares but this
+ * function cannot resolve is a gate nothing verifies at the report boundary, so
+ * the test asserts every declared key is reachable here.
+ */
+export function evidenceFactFor(
   outcome: MetricOutcomeV1,
   requirement: string
 ): number | undefined {
@@ -126,7 +140,7 @@ function evidenceFactFor(
     case "minimumEstimatorAgreement":
       return qualityNumber("estimatorAgreement");
     case "minimumValidBinsPerSegment":
-      return qualityNumber("minimumValidBinsPerSegment");
+      return qualityNumber("validBinsPerSegment");
     case "minimumEligibleSpanMs":
     case "minimumObservationSpanMs":
     case "minimumExposureMs":
@@ -134,27 +148,35 @@ function evidenceFactFor(
     case "minimumActiveSpeechMs":
       return outcome.evidence.activeDurationMs;
     case "minimumSegmentSpanMs":
-      return qualityNumber("minimumSegmentSpanMs");
+      return qualityNumber("segmentSpanMs");
     case "minimumActiveSpeechPerSegmentMs":
-      return qualityNumber("minimumActiveSpeechPerSegmentMs");
+      return qualityNumber("activeSpeechPerSegmentMs");
     case "minimumTimingCoverage":
       // No fallback to `evidence.coverage`: that field carries pitch coverage,
       // a voicing statistic, and comparing it against a timing threshold
       // failed provenance for ordinary part-voiced speech.
       return qualityNumber("timingCoverage");
     case "minimumEventsForMedian":
+      // Resolved from the metric's OWN counter. `evidence.eventCount` used to
+      // be a maximum over the pause, run, nucleus, and blink counts, so a
+      // pause-count gate could be cleared by a syllable count.
+      return qualityNumber(
+        outcome.metricCode === "ambient.voice.speech_run_duration.median"
+          ? "speechRunCount"
+          : "pauseCount"
+      );
     case "minimumNuclei":
-      return outcome.evidence.eventCount;
+      return qualityNumber("nucleusCount");
     case "minimumExpressionEvents":
       return qualityNumber("expressionEventCount");
     case "minimumCoupledExpressionEvents":
       return qualityNumber("coupledExpressionEventCount");
     case "minimumDataPerBinMs":
-      return qualityNumber("minimumDataPerBinMs");
+      return qualityNumber("dataPerBinMs");
     case "minimumSamplesPerBin":
-      return qualityNumber("minimumSamplesPerBin");
+      return qualityNumber("samplesPerBin");
     case "minimumBinSpanMs":
-      return qualityNumber("minimumBinSpanMs");
+      return qualityNumber("binSpanMs");
     case "maximumFrameGapMs":
       return qualityNumber("maximumFrameGapMs");
     case "minimumBins":
@@ -188,10 +210,15 @@ function measuredEvidenceErrors(
     if (ALGORITHM_PARAMETER_REQUIREMENTS.has(requirement)) continue;
     const actual = evidenceFactFor(outcome, requirement);
     if (actual === undefined) {
-      // Some policy gates (for example per-bin pose and estimator agreement)
-      // are enforced inside the tested extractor but are intentionally not
-      // duplicated in the terminal summary. When present, a fact must satisfy
-      // the registry; absent internal facts are not invented by the report.
+      // A measured outcome that cannot produce the evidence its own pack entry
+      // demands has not satisfied that gate — it has merely failed to report
+      // on it, which is the one outcome this system must never treat as a
+      // pass. This previously skipped silently, leaving 11 of the pack's
+      // declared requirements unverified at the report boundary while the
+      // report still claimed provenance over them.
+      errors.push(
+        `${outcome.metricCode} is missing the evidence fact for requirement ${requirement}.`
+      );
       continue;
     }
     const satisfied = requirement.startsWith("maximum")

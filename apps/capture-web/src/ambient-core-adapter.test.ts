@@ -430,3 +430,97 @@ describe("ambient observation adapter", () => {
     ).toThrow("Malformed ambient source window reference");
   });
 });
+
+describe("every published gate is verified on the success path", () => {
+  // The requirement facts are only checked for MEASURED outcomes, so a missing
+  // fact is invisible unless a test actually drives metrics to `measured`.
+  // Eleven of the pack's requirements previously resolved to undefined and were
+  // skipped in silence; they now fail provenance instead, which means this
+  // dual-lane session is what proves the extractors emit them.
+  function dualLaneObservation() {
+    return buildAmbientObservation({
+      sessionId: "session-adapter",
+      subjectRef: "subject-session-adapter",
+      consent: consent(),
+      startedAt: "2026-07-20T17:00:00.000Z",
+      endedAt: "2026-07-20T17:01:30.000Z",
+      durationMs: 90_000,
+      voiceFrames: voiceFrames(0.6),
+      faceFrames: faceFrames(90_000),
+      noiseCalibrationDurationMs: 2_000,
+      faceCalibration: {
+        durationMs: 1_500,
+        baselineBoxWidthPixels: 384,
+        baselineBoxHeightPixels: 360
+      },
+      voiceLaneAvailable: true,
+      faceLaneAvailable: true,
+      processors: []
+    });
+  }
+
+  it("measures both lanes and still validates provenance", () => {
+    const observation = dualLaneObservation();
+    const measured = observation.metricOutcomes.filter(
+      (outcome) => outcome.status === "measured"
+    );
+    // A static synthetic face produces no spontaneous expressions, so the three
+    // event-gated expression metrics correctly abstain. Everything else must
+    // measure, or this test is not exercising the path it claims to.
+    expect(measured).toHaveLength(24);
+    expect(
+      validateObservationProvenance(observation, AMBIENT_LOCAL_PROTOCOL_PACK)
+    ).toEqual({ status: "pass", errors: [] });
+  });
+
+  it("emits every worst-case gate fact the pack thresholds are checked against", () => {
+    const observation = dualLaneObservation();
+    const factsFor = (code: string) =>
+      observation.metricOutcomes.find(
+        (outcome) => outcome.metricCode === code
+      )?.evidence.qualityFacts ?? {};
+
+    // Face bin gates.
+    const bin = factsFor("ambient.face.eye_aperture.left");
+    expect(bin.dataPerBinMs).toBeDefined();
+    expect(bin.samplesPerBin).toBeDefined();
+    expect(bin.binSpanMs).toBeDefined();
+    expect(bin.maximumFrameGapMs).toBeDefined();
+
+    // Blink gates -- computed for the withhold decision since the blink work
+    // landed, but never written onto the evidence until now.
+    const blink = factsFor("ambient.face.blink_rate.bilateral");
+    expect(blink.cadenceHz).toBeDefined();
+    expect(blink.p95FrameGapMs).toBeDefined();
+
+    // Voice estimator and per-segment gates.
+    const pitch = factsFor("ambient.voice.f0.median");
+    expect(pitch.estimatorQuality).toBeDefined();
+    expect(pitch.estimatorAgreement).toBeDefined();
+    const variability = factsFor("ambient.voice.f0.variability");
+    expect(variability.validBinsPerSegment).toBeDefined();
+    const timing = factsFor("ambient.voice.pause_rate");
+    expect(timing.segmentSpanMs).toBeDefined();
+    expect(timing.activeSpeechPerSegmentMs).toBeDefined();
+  });
+
+  it("counts only the events the metric is actually built from", () => {
+    const observation = dualLaneObservation();
+    const eventCountFor = (code: string) =>
+      observation.metricOutcomes.find(
+        (outcome) => outcome.metricCode === code
+      )?.evidence.eventCount;
+
+    // `eventCount` was a maximum over the pause, run, nucleus, and blink
+    // counters, so a voice pause gate could be cleared by a syllable count and
+    // -- once face events joined -- by a blink count. Each metric now reports
+    // its own events, so these differ rather than collapsing to one number.
+    const pauses = eventCountFor("ambient.voice.pause_rate");
+    const nuclei = eventCountFor("ambient.voice.acoustic_nucleus_rate");
+    const blinks = eventCountFor("ambient.face.blink_rate.bilateral");
+    expect(pauses).toBeGreaterThan(0);
+    expect(nuclei).toBeGreaterThan(0);
+    expect(nuclei).not.toBe(pauses);
+    expect(blinks).not.toBe(nuclei);
+  });
+});

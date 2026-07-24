@@ -16,6 +16,7 @@ import {
   type ConsentRecordV1,
   type EvidenceRef,
   type EvidenceWindowV1,
+  type MetricCode,
   type MetricDefinition,
   type MetricOutcomeV1,
   type ObservationV3,
@@ -119,6 +120,41 @@ function primaryTrack(outcome: AmbientMetricOutcome): string {
     : `${outcome.modality}-track-unavailable`;
 }
 
+/**
+ * The events this particular metric is built from.
+ *
+ * This was previously `Math.max` over the pause, speech-run, nucleus, and
+ * blink counters, which conflated four unrelated counts into one number: a
+ * voice pause gate could be satisfied by a syllable count, and once face
+ * events joined the same maximum a facial count could satisfy a voice gate.
+ * Counting only the metric's own events keeps the number honest and keeps
+ * each gate answerable by its own evidence.
+ */
+function relevantEventCount(
+  code: MetricCode,
+  evidence: AmbientMetricEvidence
+): number {
+  switch (code) {
+    case "ambient.voice.pause_rate":
+    case "ambient.voice.pause_duration.median":
+      return evidence.pauseCount ?? 0;
+    case "ambient.voice.speech_run_duration.median":
+      return evidence.speechRunCount ?? 0;
+    case "ambient.voice.acoustic_nucleus_rate":
+      return evidence.nucleusCount ?? 0;
+    case "ambient.face.blink_rate.bilateral":
+      return evidence.blinkCount ?? 0;
+    case "ambient.face.spontaneous_event_rate":
+    case "ambient.face.spontaneous_excursion.p90":
+    case "ambient.face.spontaneous_excursion_asymmetry.median":
+      return evidence.expressionEventCount ?? 0;
+    case "ambient.face.oculo_oral_synkinesis_index":
+      return evidence.coupledExpressionEventCount ?? 0;
+    default:
+      return 0;
+  }
+}
+
 function qualityFacts(evidence: AmbientMetricEvidence): Record<string, number> {
   const facts: Record<string, number> = {
     eligibleDurationMs: evidence.eligibleDurationMs,
@@ -137,7 +173,21 @@ function qualityFacts(evidence: AmbientMetricEvidence): Record<string, number> {
     ["frontalExposureMs", evidence.frontalExposureMs],
     ["blinkCount", evidence.blinkCount],
     ["expressionEventCount", evidence.expressionEventCount],
-    ["coupledExpressionEventCount", evidence.coupledExpressionEventCount]
+    ["coupledExpressionEventCount", evidence.coupledExpressionEventCount],
+    // Worst-case gate facts. Each is re-verified against the pack threshold in
+    // evidence-core; a metric measured without the fact its own pack entry
+    // requires now fails provenance rather than silently passing.
+    ["estimatorQuality", evidence.estimatorQuality],
+    ["estimatorAgreement", evidence.estimatorAgreement],
+    ["segmentSpanMs", evidence.segmentSpanMs],
+    ["activeSpeechPerSegmentMs", evidence.activeSpeechPerSegmentMs],
+    ["validBinsPerSegment", evidence.validBinsPerSegment],
+    ["cadenceHz", evidence.cadenceHz],
+    ["p95FrameGapMs", evidence.p95FrameGapMs],
+    ["maximumFrameGapMs", evidence.maximumFrameGapMs],
+    ["dataPerBinMs", evidence.dataPerBinMs],
+    ["samplesPerBin", evidence.samplesPerBin],
+    ["binSpanMs", evidence.binSpanMs]
   ];
   for (const [name, value] of optional) {
     if (value !== undefined && Number.isFinite(value)) facts[name] = value;
@@ -295,12 +345,7 @@ function outcomeArtifacts(
     segmentCount: outcome.evidence.segmentCount,
     windowCount: outcome.evidence.sourceWindowRefs.length,
     binCount: outcome.evidence.qualifyingBinCount,
-    eventCount: Math.max(
-      outcome.evidence.pauseCount ?? 0,
-      outcome.evidence.speechRunCount ?? 0,
-      outcome.evidence.nucleusCount ?? 0,
-      outcome.evidence.blinkCount ?? 0
-    ),
+    eventCount: relevantEventCount(definition.code, outcome.evidence),
     sampleCount: outcome.evidence.sampleCount,
     coverage: outcome.evidence.pitchCoverage ?? null,
     qualityFacts: qualityFacts(outcome.evidence),

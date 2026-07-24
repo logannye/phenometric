@@ -348,6 +348,33 @@ function dispersion(values: readonly number[]): number | null {
     : null;
 }
 
+/**
+ * Lowest estimator confidence and agreement among the frames that actually
+ * contributed pitch. Both gates are enforced per frame inside {@link validPitch},
+ * so the worst accepted frame is what a threshold has to hold against.
+ *
+ * Returns no facts when nothing contributed pitch. A pitch metric cannot be
+ * measured in that case, and emitting a placeholder would assert evidence the
+ * session does not contain.
+ */
+function estimatorFacts(segments: readonly VoiceSegment[]): {
+  estimatorQuality?: number;
+  estimatorAgreement?: number;
+} {
+  const pitched = segments.flatMap((segment) =>
+    segment.frames.filter((frame) => validPitch(frame))
+  );
+  if (pitched.length === 0) return {};
+  return {
+    estimatorQuality: Math.min(
+      ...pitched.map((frame) => frame.frame.f0Confidence)
+    ),
+    estimatorAgreement: Math.min(
+      ...pitched.map((frame) => frame.frame.estimatorAgreement)
+    )
+  };
+}
+
 function evidenceFor(
   sourceFrames: readonly AmbientVoiceFrame[],
   segments: readonly VoiceSegment[],
@@ -390,6 +417,27 @@ function evidenceFor(
       segments.length > 0
         ? Math.min(...segments.map((segment) => segment.coverage))
         : undefined,
+    // Same worst-case rule, extended to the remaining per-segment gates so the
+    // report can re-verify each one instead of skipping it.
+    segmentSpanMs:
+      segments.length > 0
+        ? Math.min(...segments.map((segment) => segment.durationMs))
+        : undefined,
+    activeSpeechPerSegmentMs:
+      segments.length > 0
+        ? Math.min(...segments.map((segment) => segment.activeDurationMs))
+        : undefined,
+    validBinsPerSegment:
+      segments.length > 0
+        ? Math.min(
+            ...segments.map(
+              (segment) => validPitchSubwindows(segment).length
+            )
+          )
+        : undefined,
+    // The two estimator gates are enforced per frame, so the worst accepted
+    // frame is what the threshold has to hold against.
+    ...estimatorFacts(segments),
     processorRefs: sortedUnique(
       segments.length > 0
         ? segments.map((segment) => segment.processorRef)

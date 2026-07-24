@@ -152,6 +152,45 @@ export interface AmbientMetricEvidence {
   expressionEventCount?: number;
   /** Events where both sides moved enough to measure oculo-oral coupling. */
   coupledExpressionEventCount?: number;
+
+  /*
+   * Gate-verification facts.
+   *
+   * Each is the WORST value observed across the accepted units backing the
+   * metric — a minimum where the pack states a `minimum*` threshold, a maximum
+   * where it states a `maximum*` one. That polarity is what lets the report
+   * layer re-verify a gate on the same statistic the extractor enforced,
+   * rather than inferring it from a neighbouring quantity. Every accepted unit
+   * already cleared the gate, so if the worst one satisfies the threshold, all
+   * of them did.
+   *
+   * Absence is meaningful: a metric measured without the fact its own pack
+   * entry requires is a provenance error, not a pass.
+   */
+
+  /** Voice: lowest pitch-estimator confidence among pitch-usable frames. */
+  estimatorQuality?: number;
+  /** Voice: lowest agreement between the two pitch estimators. */
+  estimatorAgreement?: number;
+  /** Voice: shortest accepted segment. */
+  segmentSpanMs?: number;
+  /** Voice: least active speech contributed by any one accepted segment. */
+  activeSpeechPerSegmentMs?: number;
+  /** Voice: fewest valid 500 ms pitch subwindows in any accepted segment. */
+  validBinsPerSegment?: number;
+
+  /** Face: lowest analyzed cadence among accepted bins. */
+  cadenceHz?: number;
+  /** Face: 95th-percentile inter-frame gap across accepted bins. */
+  p95FrameGapMs?: number;
+  /** Face: largest inter-frame gap across accepted bins. */
+  maximumFrameGapMs?: number;
+  /** Face: least analyzed data contributed by any one accepted bin. */
+  dataPerBinMs?: number;
+  /** Face: fewest frames in any accepted bin. */
+  samplesPerBin?: number;
+  /** Face: shortest wall-clock span of any accepted bin. */
+  binSpanMs?: number;
   processorRefs: readonly string[];
   trackSegmentIds: readonly string[];
   sourceWindowRefs: readonly string[];

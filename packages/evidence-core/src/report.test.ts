@@ -8,7 +8,9 @@ import {
   type ObservationV3
 } from "@phenometric/contracts";
 import {
+  ALGORITHM_PARAMETER_REQUIREMENT_KEYS,
   buildPostEncounterReport,
+  evidenceFactFor,
   validateObservationProvenance
 } from "./report.js";
 
@@ -285,8 +287,11 @@ function createQualifiedZeroPauseRateObservation(): ObservationV3 {
         timingCoverage: 0.9,
         activeSpeechDurationMs: 15_000,
         segmentCount: 3,
-        minimumSegmentSpanMs: 2_000,
-        minimumActiveSpeechPerSegmentMs: 1_000
+        // Named for the statistic, not the gate: these are the worst observed
+        // per-segment values, which the pack's `minimum*` thresholds are then
+        // checked against.
+        segmentSpanMs: 2_000,
+        activeSpeechPerSegmentMs: 1_000
       },
       refs: [
         {
@@ -412,5 +417,98 @@ describe("post-encounter report", () => {
     expect(result.errors).toContain(
       "Supplied protocol pack is not the canonical active pack."
     );
+  });
+});
+
+describe("pack requirement coverage", () => {
+  /**
+   * Every fact the adapter can emit, set to a value that satisfies any
+   * threshold in either direction. The point is not whether a gate passes but
+   * whether the requirement is *reachable* at all.
+   */
+  const ALL_FACTS: Record<string, number> = {
+    eligibleDurationMs: 1,
+    sampleCount: 1,
+    segmentCount: 1,
+    qualifyingBinCount: 1,
+    activeSpeechDurationMs: 1,
+    pitchedDurationMs: 1,
+    pitchCoverage: 1,
+    timingCoverage: 1,
+    pauseCount: 1,
+    speechRunCount: 1,
+    nucleusCount: 1,
+    frontalExposureMs: 1,
+    blinkCount: 1,
+    expressionEventCount: 1,
+    coupledExpressionEventCount: 1,
+    estimatorQuality: 1,
+    estimatorAgreement: 1,
+    segmentSpanMs: 1,
+    activeSpeechPerSegmentMs: 1,
+    validBinsPerSegment: 1,
+    cadenceHz: 1,
+    p95FrameGapMs: 1,
+    maximumFrameGapMs: 1,
+    dataPerBinMs: 1,
+    samplesPerBin: 1,
+    binSpanMs: 1
+  };
+
+  function fullyEvidencedOutcome(metricCode: string): MetricOutcomeV1 {
+    return {
+      status: "measured",
+      value: 100,
+      metricCode,
+      evidence: {
+        eligibleDurationMs: 1,
+        activeDurationMs: 1,
+        segmentCount: 1,
+        windowCount: 1,
+        binCount: 1,
+        eventCount: 1,
+        sampleCount: 1,
+        coverage: 1,
+        qualityFacts: ALL_FACTS,
+        refs: []
+      }
+    } as unknown as MetricOutcomeV1;
+  }
+
+  it("resolves every requirement the pack declares", () => {
+    const unreachable: string[] = [];
+    for (const metric of AMBIENT_LOCAL_PROTOCOL_PACK.metrics) {
+      for (const requirement of Object.keys(metric.evidenceRequirements)) {
+        if (ALGORITHM_PARAMETER_REQUIREMENT_KEYS.has(requirement)) continue;
+        const fact = evidenceFactFor(
+          fullyEvidencedOutcome(metric.code),
+          requirement
+        );
+        if (fact === undefined) {
+          unreachable.push(`${metric.code}:${requirement}`);
+        }
+      }
+    }
+    // A requirement the pack publishes but the report cannot resolve is a gate
+    // nothing enforces at this boundary. Since a missing fact now fails
+    // provenance rather than passing silently, an unreachable requirement
+    // would withhold every metric that declares it.
+    expect(unreachable).toEqual([]);
+  });
+
+  it("declares every algorithm parameter that the pack actually uses", () => {
+    const declared = new Set<string>();
+    for (const metric of AMBIENT_LOCAL_PROTOCOL_PACK.metrics) {
+      for (const requirement of Object.keys(metric.evidenceRequirements)) {
+        declared.add(requirement);
+      }
+    }
+    // Guards the other direction: an algorithm-parameter exemption left behind
+    // after its requirement was removed would silently exempt a future
+    // requirement that happened to reuse the name.
+    const stale = [...ALGORITHM_PARAMETER_REQUIREMENT_KEYS].filter(
+      (key) => !declared.has(key)
+    );
+    expect(stale).toEqual([]);
   });
 });
