@@ -2,7 +2,7 @@
 
 ## Canonical checkout
 
-The canonical local checkout is `/Users/logannye/Projects/phenometric`. Use that
+The canonical local checkout is `/Users/logannye/Projects/phenometrix`. Use that
 path for all PhenoMetrix work. Do not treat generated Codex output directories
 as working copies.
 
