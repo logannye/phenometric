@@ -194,6 +194,119 @@ export function powerSpectrum(samples: Float32Array): Float64Array {
 }
 
 /**
+ * Cepstral peak prominence.
+ *
+ * The best-validated acoustic correlate of dysphonia, and markedly more robust
+ * than jitter or shimmer, which need a reliable cycle boundary to be defined at
+ * all and fall apart on the disordered voices they are meant to describe. CPP
+ * needs no cycle marking: it asks how far the cepstral peak stands above the
+ * cepstral background, which is a direct statement of how harmonically
+ * organised the signal is.
+ *
+ * Computed on the full-rate signal, not the 8 kHz pitch path, so the upper
+ * harmonics that set the background level are present.
+ *
+ * Returns null when the search range holds no usable peak -- silence, or a
+ * window too short to span a period at the lowest searched frequency. That is
+ * an abstention, not a zero: zero CPP is a meaningful value meaning "no
+ * harmonic structure", and silence has not measured that.
+ *
+ * The conventional name is CPPS, where the S is smoothing across time and
+ * frequency. This returns the per-window value; smoothing belongs to whatever
+ * aggregates the windows, which is where the time axis exists.
+ */
+export function cepstralPeakProminence(
+  samples: Float32Array,
+  sampleRate: number,
+  minF0Hz = 50,
+  maxF0Hz = 700
+): { prominenceDb: number; peakQuefrencyHz: number } | null {
+  if (samples.length < 64 || sampleRate <= 0) return null;
+
+  const windowed = applyWindow(samples, hannWindow(samples.length));
+  const spectrum = powerSpectrum(windowed);
+  // Guard the log against exact zeros in padded or silent windows.
+  const floor = 1e-20;
+  const logSpectrum = new Float32Array(spectrum.length);
+  let energy = 0;
+  for (let bin = 0; bin < spectrum.length; bin += 1) {
+    logSpectrum[bin] = Math.log10(spectrum[bin] + floor);
+    energy += spectrum[bin];
+  }
+  if (energy <= floor) return null;
+
+  // Cepstrum: the transform of the log spectrum. The harmonic comb is periodic
+  // ALONG THE FREQUENCY AXIS, so it collapses to a single peak here.
+  const cepstrum = powerSpectrum(logSpectrum);
+
+  /*
+   * Index-to-frequency, derived rather than assumed.
+   *
+   * The cepstrum is taken over the spectrum array, so a quefrency index is a
+   * period measured in frequency BINS, not in signal samples. Two transform
+   * sizes are therefore involved:
+   *
+   *   binSpacing = sampleRate / spectrumSize          Hz per spectral bin
+   *   harmonics at F0 repeat every  F0 / binSpacing   bins
+   *   index q spans  cepstrumSize / q                 bins per cycle
+   *
+   * Equating the last two gives F0 = binSpacing * cepstrumSize / q. Treating q
+   * as a lag in signal samples -- the intuitive reading, and the wrong one --
+   * misplaces the peak by the ratio of the two transform sizes.
+   */
+  const spectrumSize = nextPowerOfTwo(Math.max(2, windowed.length));
+  const cepstrumSize = nextPowerOfTwo(Math.max(2, logSpectrum.length));
+  const binSpacing = sampleRate / spectrumSize;
+  const indexFor = (frequencyHz: number) =>
+    (binSpacing * cepstrumSize) / frequencyHz;
+  const frequencyAt = (index: number) =>
+    (binSpacing * cepstrumSize) / index;
+
+  const lowLag = Math.max(2, Math.floor(indexFor(maxF0Hz)));
+  const highLag = Math.min(cepstrum.length - 2, Math.ceil(indexFor(minF0Hz)));
+  if (highLag - lowLag < 4) return null;
+
+  let peakLag = lowLag;
+  for (let lag = lowLag; lag <= highLag; lag += 1) {
+    if (cepstrum[lag] > cepstrum[peakLag]) peakLag = lag;
+  }
+
+  // Least-squares line through the cepstral background across the same band.
+  // The prominence is the peak's height ABOVE that trend, which is what makes
+  // the measure insensitive to overall level and to the spectral tilt of the
+  // recording chain.
+  let sumX = 0;
+  let sumY = 0;
+  let sumXy = 0;
+  let sumXx = 0;
+  const count = highLag - lowLag + 1;
+  for (let lag = lowLag; lag <= highLag; lag += 1) {
+    const y = cepstrum[lag];
+    sumX += lag;
+    sumY += y;
+    sumXy += lag * y;
+    sumXx += lag * lag;
+  }
+  const denominator = count * sumXx - sumX * sumX;
+  if (denominator === 0) return null;
+  const slope = (count * sumXy - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / count;
+  const baseline = slope * peakLag + intercept;
+
+  // Peak height as a ratio above the fitted background. Expressed in decibels
+  // because the cepstrum is a power quantity. Measuring against the regression
+  // line rather than against zero is what makes this independent of overall
+  // level and of the recording chain's spectral tilt.
+  if (!(baseline > 0) || !Number.isFinite(cepstrum[peakLag])) return null;
+  const ratio = cepstrum[peakLag] / baseline;
+  if (!(ratio > 0)) return null;
+  return {
+    prominenceDb: 10 * Math.log10(ratio),
+    peakQuefrencyHz: frequencyAt(peakLag)
+  };
+}
+
+/**
  * Windowed-sinc low-pass FIR, normalised to unit gain at DC.
  *
  * `cutoffRatio` is the -6 dB point as a fraction of the sample rate, so 0.25 is

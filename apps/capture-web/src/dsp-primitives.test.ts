@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyWindow,
+  cepstralPeakProminence,
   decimate,
   designLowPass,
   fftInPlace,
@@ -246,5 +247,78 @@ describe("window application", () => {
       Float32Array.from([1, 0.5, 0])
     );
     expect([...result]).toEqual([1, 1, 0]);
+  });
+});
+
+describe("cepstral peak prominence", () => {
+  const RATE = 48_000;
+  const WINDOW = 1_920; // 40 ms, the analysis window the worker uses
+
+  /**
+   * Pulse train filling the band, as a crude glottal source.
+   *
+   * The comb has to span the analysed spectrum. A signal whose harmonics stop
+   * partway leaves most of the log spectrum at the floor, and the cepstrum then
+   * locks onto that spectral edge instead of the comb -- an artifact of the
+   * stimulus, but one that produces a confident, wrong frequency.
+   */
+  function harmonic(f0: number, length: number): Float32Array {
+    const samples = new Float32Array(length);
+    const harmonics = Math.floor(RATE / 2 / f0) - 1;
+    for (let index = 0; index < length; index += 1) {
+      let value = 0;
+      for (let h = 1; h <= harmonics; h += 1) {
+        // 1/h rolloff approximates a glottal spectrum.
+        value += Math.sin((2 * Math.PI * h * f0 * index) / RATE) / h;
+      }
+      samples[index] = value * 0.2;
+    }
+    return samples;
+  }
+
+  /** Deterministic pseudo-noise; no Math.random, so the test cannot flake. */
+  function noise(length: number): Float32Array {
+    const samples = new Float32Array(length);
+    let seed = 12_345;
+    for (let index = 0; index < length; index += 1) {
+      seed = (seed * 1_103_515_245 + 12_345) & 0x7fffffff;
+      samples[index] = (seed / 0x3fffffff - 1) * 0.2;
+    }
+    return samples;
+  }
+
+  it("stands well above the background for a harmonic signal", () => {
+    const result = cepstralPeakProminence(harmonic(120, WINDOW), RATE);
+    expect(result).not.toBeNull();
+    expect(result!.prominenceDb).toBeGreaterThan(0);
+  });
+
+  it("separates a harmonic signal from noise", () => {
+    // The whole point of the measure: how harmonically organised the signal is.
+    // Noise has no comb, so its cepstral peak barely clears its own trend.
+    const voiced = cepstralPeakProminence(harmonic(120, WINDOW), RATE)!;
+    const unvoiced = cepstralPeakProminence(noise(WINDOW), RATE)!;
+    expect(voiced.prominenceDb).toBeGreaterThan(unvoiced.prominenceDb);
+  });
+
+  it("locates the peak at the fundamental that produced it", () => {
+    // Guards the index-to-frequency derivation. Reading quefrency as a lag in
+    // signal samples misplaces this by the ratio of the two transform sizes,
+    // and the error is silent -- the number still looks like a frequency.
+    for (const f0 of [100, 150, 220]) {
+      const result = cepstralPeakProminence(harmonic(f0, WINDOW), RATE)!;
+      expect(result.peakQuefrencyHz).toBeGreaterThan(f0 * 0.8);
+      expect(result.peakQuefrencyHz).toBeLessThan(f0 * 1.25);
+    }
+  });
+
+  it("abstains on silence rather than reporting zero", () => {
+    // Zero prominence is a real value meaning "no harmonic structure".
+    // Silence has not measured that, so it must not claim it.
+    expect(cepstralPeakProminence(new Float32Array(WINDOW), RATE)).toBeNull();
+  });
+
+  it("abstains on a window too short to hold a low period", () => {
+    expect(cepstralPeakProminence(new Float32Array(32), RATE)).toBeNull();
   });
 });

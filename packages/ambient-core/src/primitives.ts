@@ -24,6 +24,23 @@ export interface VoiceSignalFrameV1 {
   f0Hz: number | null;
   f0Confidence: number;
   estimatorAgreement: number;
+  /**
+   * Rectified spectral change since the previous window; 0 for the first.
+   * Already drove voice-activity and syllable detection but was never recorded,
+   * so nothing downstream could reuse it.
+   *
+   * Optional because a frame produced by an earlier build does not carry it.
+   */
+  spectralFlux?: number;
+  /**
+   * Cepstral peak prominence in dB, the best-validated acoustic correlate of
+   * dysphonia, computed on the full-rate signal.
+   *
+   * Null distinguishes "no harmonic structure was measurable here" -- silence,
+   * or a window too short -- from a measured zero, which means the window was
+   * analysed and found to have none.
+   */
+  cepstralPeakProminenceDb?: number | null;
   syllabicNucleus: boolean;
   clippedSampleFraction: number;
   dcOffset: number;
