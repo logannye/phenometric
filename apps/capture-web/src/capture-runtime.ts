@@ -1,7 +1,7 @@
 import type {
   FacialKinematicsFrameV1,
   VoiceSignalFrameV1
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 
 export interface CaptureResourceHandles {
   stopFacePump?(): void;

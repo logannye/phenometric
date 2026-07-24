@@ -4,8 +4,8 @@ import type {
   AudioStreamDiagnostics,
   BrowserAudioProcessingState,
   VoiceTaskContext
-} from "@phenometric/contracts";
-import type { VoiceSignalFrameV1 } from "@phenometric/ambient-core";
+} from "@phenometrix/contracts";
+import type { VoiceSignalFrameV1 } from "@phenometrix/ambient-core";
 
 export const VOICE_WORKER_MESSAGE_VERSION =
   "phenometric.voice-worker-message.v1" as const;

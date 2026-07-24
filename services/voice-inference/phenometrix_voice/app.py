@@ -34,7 +34,7 @@ def create_app(
         application.state.adapter = None
 
     app = FastAPI(
-        title="PhenoMetric Voice Representation Service",
+        title="PhenoMetrix Voice Representation Service",
         version="0.1.0",
         docs_url=None,
         redoc_url=None,

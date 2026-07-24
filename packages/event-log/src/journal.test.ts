@@ -3,7 +3,7 @@ import {
   AMBIENT_LOCAL_PROTOCOL_REF,
   type WorkflowEventInputV1,
   type WorkflowEventV1
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import {
   EventJournalError,
   InMemoryEventJournal,

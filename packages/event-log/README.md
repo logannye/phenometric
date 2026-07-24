@@ -1,8 +1,8 @@
 # Session-only workflow event journal
 
-`@phenometric/event-log` is the in-memory journal for the standalone ambient
+`@phenometrix/event-log` is the in-memory journal for the standalone ambient
 prototype. It accepts only the discriminated
-`phenometric.workflow-event.v1` contract from `@phenometric/contracts`.
+`phenometric.workflow-event.v1` contract from `@phenometrix/contracts`.
 
 The journal:
 
@@ -19,8 +19,8 @@ storage, IndexedDB, a server, or raw media. Resetting or reloading the app ends
 the journal's lifetime.
 
 ```ts
-import { AMBIENT_LOCAL_PROTOCOL_REF } from "@phenometric/contracts";
-import { InMemoryEventJournal } from "@phenometric/event-log";
+import { AMBIENT_LOCAL_PROTOCOL_REF } from "@phenometrix/contracts";
+import { InMemoryEventJournal } from "@phenometrix/event-log";
 
 const journal = new InMemoryEventJournal({
   sessionId: "session-local-1",

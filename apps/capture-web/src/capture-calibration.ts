@@ -2,7 +2,7 @@ import {
   DEFAULT_CAPTURE_QUALITY_POLICY,
   evaluateVisualQuality,
   type FacialKinematicsFrameV1
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import type {
   AudioCalibration,
   CalibrationQuality,
@@ -10,7 +10,7 @@ import type {
   FaceCalibration,
   VisualQualityAssessment,
   VisualQualityReasonCode
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 export const PREFLIGHT_FACE_MINIMUM_DURATION_MS =
   DEFAULT_CAPTURE_QUALITY_POLICY.minimumFaceCalibrationDurationMs;

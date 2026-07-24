@@ -4,7 +4,7 @@ import {
   type WorkflowEventInputV1,
   type WorkflowEventV1,
   type WorkflowStageV1
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 export interface EventJournalOptions {
   sessionId: string;

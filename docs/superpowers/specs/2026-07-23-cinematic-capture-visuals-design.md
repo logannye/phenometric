@@ -7,7 +7,7 @@
 
 ## 1. Summary
 
-Make PhenoMetric's live capture surface visually striking for in-person demos, without
+Make PhenoMetrix's live capture surface visually striking for in-person demos, without
 touching a single byte of what the system measures, stores, or lets cross the worker
 boundary. Three surfaces get an upgrade:
 

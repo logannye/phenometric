@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { FaceCalibration } from "@phenometric/contracts";
+import type { FaceCalibration } from "@phenometrix/contracts";
 import { syntheticFacialFrame } from "./test-helpers.js";
 import { evaluateVisualQuality } from "./visual-quality.js";
 

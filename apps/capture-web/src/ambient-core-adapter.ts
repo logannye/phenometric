@@ -5,7 +5,7 @@ import {
   type AmbientMetricEvidence,
   type AmbientMetricOutcome,
   type AmbientVoiceFrame
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import {
   AMBIENT_LOCAL_PROTOCOL_PACK,
   AMBIENT_LOCAL_PROTOCOL_REF,
@@ -22,7 +22,7 @@ import {
   type ObservationV3,
   type ProcessorProvenanceV1,
   type WithheldReasonCode
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 export interface AmbientObservationBuildInput {
   sessionId: string;

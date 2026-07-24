@@ -1,10 +1,10 @@
-import type { FacialKinematicsFrameV1 } from "@phenometric/ambient-core";
+import type { FacialKinematicsFrameV1 } from "@phenometrix/ambient-core";
 import type {
   FaceCalibration,
   VideoCaptureSettings,
   VisualPipelineProvenance,
   VisualTaskContext
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import type { FrameStreamDiagnostics } from "./visual-frame-pump.js";
 import type { ScheduledVisualFrame } from "./visual-frame-pump.js";
 

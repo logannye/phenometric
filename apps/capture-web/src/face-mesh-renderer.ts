@@ -1,5 +1,5 @@
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
-import type { VisualTaskContext } from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometrix/contracts";
 
 export const FACE_MESH_LANDMARK_COUNT = 478;
 

@@ -1,4 +1,4 @@
-# PhenoMetric architecture
+# PhenoMetrix architecture
 
 This document describes the implemented ambient-v3 prototype. Long-term
 platform ideas in `telehealth-platform-vision.md` are not shipping behavior.
@@ -71,7 +71,7 @@ Discard, which routes to that same disposal path.
 
 ## Measurement and abstention
 
-`@phenometric/ambient-core` owns the frozen 16-metric registry and deterministic
+`@phenometrix/ambient-core` owns the frozen 16-metric registry and deterministic
 extractors. Extractors receive derived frames only. They screen evidence into
 qualified voice segments or five-second face bins, then return one terminal
 outcome for every registered metric.
@@ -98,7 +98,7 @@ The in-memory workflow journal records consent, permission, calibration,
 capture, measurement/withholding, observation, and report lifecycle events.
 It is not a durable audit log.
 
-`@phenometric/evidence-core` validates the observation against the canonical
+`@phenometrix/evidence-core` validates the observation against the canonical
 protocol registry and resolves evidence references before building the report.
 The report contains capture quality plus seven metric sections. It has no
 generated prose or clinical claim.
@@ -114,7 +114,7 @@ assets cause the affected lane to fail closed.
 The guided calibration interfaces remain for compile compatibility and research
 tests. They are disconnected from ObservationV3 and the live application.
 
-`@phenometric/trajectory-core` and the v2 observation, measurement, and event
+`@phenometrix/trajectory-core` and the v2 observation, measurement, and event
 interfaces were removed on 2026-07-24. The package compared one session scalar
 against an unordered bag of priors, was built on superseded v2 contracts, and
 had no importers. The capture-provenance types it shared a file with

@@ -6,11 +6,11 @@ import type {
 import {
   evaluateVisualQuality,
   type FacialKinematicsFrameV1
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import type {
   FaceCalibration,
   VisualTaskContext
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import type { FaceImageQuality } from "./visual-image-quality.js";
 
 export const FACIAL_KINEMATICS_SCHEMA_VERSION =

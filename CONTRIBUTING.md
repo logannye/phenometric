@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for contributing to PhenoMetric.
+Thank you for contributing to PhenoMetrix.
 
 ## Before opening a change
 

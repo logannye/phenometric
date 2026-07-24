@@ -3,7 +3,7 @@ import type {
   Matrix,
   NormalizedLandmark
 } from "@mediapipe/tasks-vision";
-import type { FacialKinematicsFrameV1 } from "@phenometric/ambient-core";
+import type { FacialKinematicsFrameV1 } from "@phenometrix/ambient-core";
 import { describe, expect, it } from "vitest";
 import {
   coordinateSystem,

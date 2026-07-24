@@ -3,11 +3,11 @@
 import type {
   AudioStreamDiagnostics,
   VoiceTaskContext
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import {
   evaluateVoiceQuality,
   type AmbientVoiceFrame
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import {
   BoundedPcmRingBuffer,
   analyzeVoiceWindow

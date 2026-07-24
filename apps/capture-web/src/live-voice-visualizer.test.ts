@@ -1,4 +1,4 @@
-import type { VoiceSignalFrameV1 } from "@phenometric/ambient-core";
+import type { VoiceSignalFrameV1 } from "@phenometrix/ambient-core";
 import { describe, expect, it, vi } from "vitest";
 import {
   LiveVoiceHistory,

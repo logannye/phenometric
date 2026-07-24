@@ -2,7 +2,7 @@
 
 ## Demonstration boundary
 
-PhenoMetric is a nonclinical engineering prototype. It must not be used for
+PhenoMetrix is a nonclinical engineering prototype. It must not be used for
 diagnosis, treatment, emergency detection, progression classification,
 population screening, or decisions about a person. It must not process PHI.
 

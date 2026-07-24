@@ -13,16 +13,16 @@ importers:
       '@mediapipe/tasks-vision':
         specifier: 0.10.35
         version: 0.10.35
-      '@phenometric/ambient-core':
+      '@phenometrix/ambient-core':
         specifier: workspace:*
         version: link:../../packages/ambient-core
-      '@phenometric/contracts':
+      '@phenometrix/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@phenometric/event-log':
+      '@phenometrix/event-log':
         specifier: workspace:*
         version: link:../../packages/event-log
-      '@phenometric/evidence-core':
+      '@phenometrix/evidence-core':
         specifier: workspace:*
         version: link:../../packages/evidence-core
       zod:
@@ -50,7 +50,7 @@ importers:
 
   packages/ambient-core:
     dependencies:
-      '@phenometric/contracts':
+      '@phenometrix/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -82,7 +82,7 @@ importers:
 
   packages/event-log:
     dependencies:
-      '@phenometric/contracts':
+      '@phenometrix/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:
@@ -95,23 +95,7 @@ importers:
 
   packages/evidence-core:
     dependencies:
-      '@phenometric/contracts':
-        specifier: workspace:*
-        version: link:../contracts
-    devDependencies:
-      typescript:
-        specifier: 5.6.3
-        version: 5.6.3
-      vitest:
-        specifier: 2.1.4
-        version: 2.1.4(@types/node@22.20.0)(lightningcss@1.32.0)
-
-  packages/trajectory-core:
-    dependencies:
-      '@phenometric/ambient-core':
-        specifier: workspace:*
-        version: link:../ambient-core
-      '@phenometric/contracts':
+      '@phenometrix/contracts':
         specifier: workspace:*
         version: link:../contracts
     devDependencies:

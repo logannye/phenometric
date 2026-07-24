@@ -3,7 +3,7 @@ import {
   AMBIENT_VOICE_TASK_CONTEXT,
   type AmbientFacialFrame,
   type AmbientVoiceFrame
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import {
   AMBIENT_LOCAL_CONSENT_TEXT,
   AMBIENT_LOCAL_PROTOCOL_PACK,
@@ -16,9 +16,9 @@ import {
   type PostEncounterReportV1,
   type ProcessorProvenanceV1,
   type VisualPipelineProvenance
-} from "@phenometric/contracts";
-import { buildPostEncounterReport } from "@phenometric/evidence-core";
-import { InMemoryEventJournal } from "@phenometric/event-log";
+} from "@phenometrix/contracts";
+import { buildPostEncounterReport } from "@phenometrix/evidence-core";
+import { InMemoryEventJournal } from "@phenometrix/event-log";
 import { buildAmbientObservation } from "./ambient-core-adapter.js";
 import {
   AMBIENT_CAPTURE_LIMIT_MS,

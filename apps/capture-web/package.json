@@ -1,5 +1,5 @@
 {
-  "name": "@phenometric/capture-web",
+  "name": "@phenometrix/capture-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "0.10.35",
-    "@phenometric/ambient-core": "workspace:*",
-    "@phenometric/contracts": "workspace:*",
-    "@phenometric/evidence-core": "workspace:*",
-    "@phenometric/event-log": "workspace:*",
+    "@phenometrix/ambient-core": "workspace:*",
+    "@phenometrix/contracts": "workspace:*",
+    "@phenometrix/evidence-core": "workspace:*",
+    "@phenometrix/event-log": "workspace:*",
     "zod": "4.4.3"
   },
   "devDependencies": {

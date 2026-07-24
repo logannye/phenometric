@@ -1,4 +1,4 @@
-# PhenoMetric operator guide
+# PhenoMetrix operator guide
 
 ## Environment
 
@@ -65,7 +65,7 @@ must remain disabled by default and bound to loopback.
 
 ## Common failures
 
-- **Asset integrity failure:** run `pnpm --filter @phenometric/capture-web
+- **Asset integrity failure:** run `pnpm --filter @phenometrix/capture-web
   verify:assets`; rebuild the manifest only after intentionally reviewing an
   asset change.
 - **Permission denied:** reset the site permission in Chrome and start a new

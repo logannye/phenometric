@@ -1,7 +1,7 @@
 import type {
   AudioQualityReasonCode,
   BrowserAudioProcessingState
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import type { VoiceSignalFrameV1 } from "./primitives.js";
 
 export const VOICE_GENERAL_SNR_FLOOR_DB = 15;

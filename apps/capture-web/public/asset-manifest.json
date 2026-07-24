@@ -7,7 +7,7 @@
     },
     "voiceWorklet": {
       "path": "voice-capture-worklet.js",
-      "sha256": "8affad59f113326dbcb58bd464ac51daba7e96be41e17e0a1e5a34f6463bd949"
+      "sha256": "7003f2dbbf8cbf234f1f8e15195cca36b1fe0a014944b6593c69441ba3945332"
     },
     "visionWasmScript": {
       "path": "mediapipe/vision_wasm_internal.js",

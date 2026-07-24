@@ -20,13 +20,13 @@ cache. Start the service in one terminal:
 
 ```bash
 PHENOMETRIC_WAVLM_ENABLED=1 uv run --extra wavlm \
-  uvicorn phenometric_voice.app:app --host 127.0.0.1 --port 8765 --no-access-log
+  uvicorn phenometrix_voice.app:app --host 127.0.0.1 --port 8765 --no-access-log
 ```
 
 Then run generated-audio smoke in a second terminal:
 
 ```bash
-uv run python -m phenometric_voice.manual_smoke
+uv run python -m phenometrix_voice.manual_smoke
 ```
 
 The browser endpoint is

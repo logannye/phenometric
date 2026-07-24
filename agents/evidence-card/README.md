@@ -8,7 +8,7 @@ measurements and evidence.
 ## Current implementation
 
 The current milestone implements only the deterministic structured report in
-`@phenometric/evidence-core`. It validates ObservationV3 against the canonical
+`@phenometrix/evidence-core`. It validates ObservationV3 against the canonical
 protocol pack, resolves measurement/window/aggregate provenance, orders the
 eight report sections, and preserves the nonclinical boundary statement.
 

@@ -3,18 +3,18 @@ import {
   AMBIENT_LOCAL_PROTOCOL_PACK,
   type ConsentRecordV1,
   type MetricDefinition
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import {
   finalizeAmbientMetrics,
   type AmbientFacialFrame,
   type AmbientMetricOutcome,
   type AmbientVoiceFrame,
   type AmbientWithheldReasonCode
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import {
   buildPostEncounterReport,
   validateObservationProvenance
-} from "@phenometric/evidence-core";
+} from "@phenometrix/evidence-core";
 import {
   buildAmbientObservation,
   contractReason,
