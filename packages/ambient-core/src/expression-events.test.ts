@@ -129,8 +129,11 @@ describe("excursion asymmetry", () => {
     frameCount: 25,
     peakElevationLeft: left,
     peakElevationRight: right,
-    eyeDeltaLeft: 0,
-    eyeDeltaRight: 0
+    riseMs: 500,
+    dwellMs: 100,
+    decayTauMs: 200,
+    lidApertureDeltaLeft: 0,
+    lidApertureDeltaRight: 0
   });
 
   it("is zero for a symmetric expression and signed toward the larger side", () => {
@@ -158,8 +161,11 @@ describe("synkinesis index", () => {
     frameCount: 25,
     peakElevationLeft: 0.1,
     peakElevationRight: 0.1,
-    eyeDeltaLeft: -0.01,
-    eyeDeltaRight: -0.01,
+    riseMs: 500,
+    dwellMs: 100,
+    decayTauMs: 200,
+    lidApertureDeltaLeft: -0.01,
+    lidApertureDeltaRight: -0.01,
     ...over
   });
 
@@ -168,19 +174,19 @@ describe("synkinesis index", () => {
     // Same coupling ratio, different absolute movement, still symmetric.
     expect(
       synkinesisIndex(
-        event({ peakElevationLeft: 0.2, eyeDeltaLeft: -0.02 })
+        event({ peakElevationLeft: 0.2, lidApertureDeltaLeft: -0.02 })
       )
     ).toBeCloseTo(0, 6);
   });
 
   it("is negative when the left eye narrows disproportionately", () => {
-    const value = synkinesisIndex(event({ eyeDeltaLeft: -0.05 }));
+    const value = synkinesisIndex(event({ lidApertureDeltaLeft: -0.05 }));
     expect(value).toBeLessThan(0);
   });
 
   it("abstains rather than dividing by a side that barely moved", () => {
     expect(synkinesisIndex(event({ peakElevationRight: 0.001 }))).toBeNull();
-    expect(synkinesisIndex(event({ eyeDeltaLeft: Number.NaN }))).toBeNull();
+    expect(synkinesisIndex(event({ lidApertureDeltaLeft: Number.NaN }))).toBeNull();
   });
 });
 
@@ -264,5 +270,89 @@ describe("rejected-bin holes", () => {
     const frames = acrossHole(40);
     const baseline = restingBaseline(frames)!;
     expect(detectExpressionEvents(frames, baseline)).toHaveLength(1);
+  });
+});
+
+describe("expression kinematics", () => {
+  /** Rise, hold, then exponential relaxation back to rest. */
+  function shapedExpression(
+    { riseMs = 400, holdMs = 600, tauMs = 300 } = {}
+  ): AmbientFacialFrame[] {
+    const frames: AmbientFacialFrame[] = [];
+    const peak = 0.12;
+    const step = 40;
+    for (let tMs = 0; tMs < 6_000; tMs += step) {
+      frames.push(frameAt(tMs, { liftLeft: 0, liftRight: 0 }));
+    }
+    for (let tMs = 0; tMs < riseMs; tMs += step) {
+      const lift = peak * (tMs / riseMs);
+      frames.push(frameAt(6_000 + tMs, { liftLeft: lift, liftRight: lift }));
+    }
+    for (let tMs = 0; tMs < holdMs; tMs += step) {
+      frames.push(
+        frameAt(6_000 + riseMs + tMs, { liftLeft: peak, liftRight: peak })
+      );
+    }
+    for (let tMs = 0; tMs < 2_000; tMs += step) {
+      const lift = peak * Math.exp(-tMs / tauMs);
+      frames.push(
+        frameAt(6_000 + riseMs + holdMs + tMs, {
+          liftLeft: lift,
+          liftRight: lift
+        })
+      );
+    }
+    return frames;
+  }
+
+  it("separates rise from dwell", () => {
+    // riseMs is onset-to-peak where onset is the threshold crossing, not the
+    // true start of movement, so it UNDERSTATES the real rise. A 400 ms ramp to
+    // a peak of 0.12 crosses the 0.04 onset threshold a third of the way up,
+    // leaving about 267 ms visible. That is a property of detecting movement by
+    // threshold, and it is why this is a relative measure between events rather
+    // than an absolute duration.
+    const frames = shapedExpression({ riseMs: 400, holdMs: 600 });
+    const baseline = restingBaseline(frames)!;
+    const [event] = detectExpressionEvents(frames, baseline);
+    expect(event).toBeDefined();
+    expect(event.riseMs).toBeGreaterThan(200);
+    expect(event.riseMs).toBeLessThan(400);
+    expect(event.dwellMs).toBeGreaterThan(400);
+    // The distinction the measure has to support: a hold is not a rise.
+    expect(event.dwellMs).toBeGreaterThan(event.riseMs);
+  });
+
+  it("orders decay constants by how fast the movement relaxes", () => {
+    const eventFor = (tau: number) => {
+      const frames = shapedExpression({ tauMs: tau });
+      return detectExpressionEvents(frames, restingBaseline(frames)!)[0];
+    };
+    // Only the ORDERING is asserted. The fitted value runs high -- the resting
+    // baseline is estimated from frames that include the expression, so the
+    // decay asymptotes slightly above true rest and biases the log fit. A
+    // sustained relaxation still has to come out slower than a brisk one, which
+    // is the clinical distinction; the absolute constant is not calibrated and
+    // is not claimed to be.
+    expect(eventFor(300).decayTauMs).toBeGreaterThan(0);
+    expect(eventFor(900).decayTauMs!).toBeGreaterThan(
+      eventFor(300).decayTauMs!
+    );
+  });
+
+  it("abstains on decay when the movement is cut off by the window", () => {
+    // A tail that never relaxes cannot yield a time constant. Fitting one to a
+    // truncated decay would produce a number with no relaxation behind it.
+    const frames: AmbientFacialFrame[] = [];
+    for (let tMs = 0; tMs < 6_000; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0, liftRight: 0 }));
+    }
+    for (let tMs = 6_000; tMs < 7_000; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0.12, liftRight: 0.12 }));
+    }
+    const baseline = restingBaseline(frames)!;
+    const [event] = detectExpressionEvents(frames, baseline);
+    expect(event).toBeDefined();
+    expect(event.decayTauMs).toBeNull();
   });
 });

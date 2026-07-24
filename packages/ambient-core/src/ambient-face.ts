@@ -1176,6 +1176,11 @@ export function extractAmbientFaceMetrics(
       return outcome;
     }),
     ignoredFrameCount,
-    events: { blinks: blinkEvents }
+    events: {
+      blinks: blinkEvents,
+      // Already fully computed for the summary and previously reduced to two
+      // integers before anything could see them.
+      expressions: expressionSummary?.events ?? []
+    }
   };
 }

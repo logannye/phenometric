@@ -1,3 +1,4 @@
+import type { ExpressionEventRecord } from "./kinematic-events.js";
 /**
  * Spontaneous facial expression events.
  *
@@ -71,18 +72,14 @@ export interface ExpressionBaseline {
   sampleCount: number;
 }
 
-export interface ExpressionEvent {
-  startMs: number;
-  endMs: number;
-  peakMs: number;
-  frameCount: number;
-  /** Corner rise above baseline at the peak frame, inter-eye units, >= 0. */
-  peakElevationLeft: number;
-  peakElevationRight: number;
-  /** Eye-aperture change at the peak frame. Negative means narrowing. */
-  eyeDeltaLeft: number;
-  eyeDeltaRight: number;
-}
+/**
+ * A detected expression, with the shape of its trajectory.
+ *
+ * Structurally the Tier-2 {@link ExpressionEventRecord}. Kept as its own name
+ * because the detector's callers predate the record type; the fields are the
+ * same set.
+ */
+export type ExpressionEvent = ExpressionEventRecord;
 
 function finite(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -170,6 +167,69 @@ function drive(frame: AmbientFacialFrame, baseline: ExpressionBaseline): number 
  * returned; an "expression event" here is a named movement pattern of the
  * mouth, nothing more.
  */
+
+interface DriveSample {
+  tMs: number;
+  value: number;
+}
+
+/** Time spent within 10% of the peak drive. */
+function dwellAtPeak(drives: readonly DriveSample[], peakDrive: number): number {
+  if (peakDrive <= 0 || drives.length < 2) return 0;
+  const threshold = peakDrive * 0.9;
+  let total = 0;
+  for (let index = 1; index < drives.length; index += 1) {
+    if (drives[index].value >= threshold && drives[index - 1].value >= threshold) {
+      total += drives[index].tMs - drives[index - 1].tMs;
+    }
+  }
+  return total;
+}
+
+/**
+ * Exponential time constant of the return to baseline.
+ *
+ * Fitted as a least-squares line through ln(drive) after the peak; tau is the
+ * negative reciprocal of its slope. The relaxation shape is what separates a
+ * flaccid movement from a synkinetic one, which can reach similar peaks by
+ * different paths.
+ *
+ * Null when the decay does not support a fit -- fewer than three usable points,
+ * or a slope that is flat or rising, which is what a movement cut short by the
+ * end of the window looks like. Fitting a constant to a truncated tail would
+ * produce a number with no relaxation behind it.
+ */
+function decayTimeConstant(
+  drives: readonly DriveSample[],
+  peakMs: number,
+  peakDrive: number
+): number | null {
+  if (peakDrive <= 0) return null;
+  const tail = drives.filter(
+    (sample) => sample.tMs > peakMs && sample.value > peakDrive * 0.05
+  );
+  if (tail.length < 3) return null;
+  let sumX = 0;
+  let sumY = 0;
+  let sumXy = 0;
+  let sumXx = 0;
+  for (const sample of tail) {
+    const x = sample.tMs - peakMs;
+    const y = Math.log(sample.value);
+    sumX += x;
+    sumY += y;
+    sumXy += x * y;
+    sumXx += x * x;
+  }
+  const count = tail.length;
+  const denominator = count * sumXx - sumX * sumX;
+  if (denominator === 0) return null;
+  const slope = (count * sumXy - sumX * sumY) / denominator;
+  if (!(slope < 0)) return null;
+  const tau = -1 / slope;
+  return Number.isFinite(tau) && tau > 0 ? tau : null;
+}
+
 export function detectExpressionEvents(
   frames: readonly AmbientFacialFrame[],
   baseline: ExpressionBaseline
@@ -201,6 +261,10 @@ export function detectExpressionEvents(
         }
       }
       const peakElevation = elevations(peak, baseline);
+      const drives = open.map((frame) => ({
+        tMs: frame.tMs,
+        value: drive(frame, baseline)
+      }));
       events.push({
         startMs,
         endMs,
@@ -208,10 +272,15 @@ export function detectExpressionEvents(
         frameCount: open.length,
         peakElevationLeft: peakElevation.left,
         peakElevationRight: peakElevation.right,
-        eyeDeltaLeft: finite(peak.eyeAperture?.left)
+        // Onset to peak. A brisk recruit and a slow one can reach the same
+        // height, and only this separates them.
+        riseMs: peak.tMs - startMs,
+        dwellMs: dwellAtPeak(drives, peakDrive),
+        decayTauMs: decayTimeConstant(drives, peak.tMs, peakDrive),
+        lidApertureDeltaLeft: finite(peak.eyeAperture?.left)
           ? peak.eyeAperture.left - baseline.leftEyeAperture
           : Number.NaN,
-        eyeDeltaRight: finite(peak.eyeAperture?.right)
+        lidApertureDeltaRight: finite(peak.eyeAperture?.right)
           ? peak.eyeAperture.right - baseline.rightEyeAperture
           : Number.NaN
       });
@@ -278,18 +347,21 @@ export function synkinesisIndex(event: ExpressionEvent): number | null {
   const {
     peakElevationLeft,
     peakElevationRight,
-    eyeDeltaLeft,
-    eyeDeltaRight
+    lidApertureDeltaLeft,
+    lidApertureDeltaRight
   } = event;
   if (
     peakElevationLeft < SYNKINESIS_MIN_ELEVATION ||
     peakElevationRight < SYNKINESIS_MIN_ELEVATION ||
-    !finite(eyeDeltaLeft) ||
-    !finite(eyeDeltaRight)
+    !finite(lidApertureDeltaLeft) ||
+    !finite(lidApertureDeltaRight)
   ) {
     return null;
   }
-  return eyeDeltaLeft / peakElevationLeft - eyeDeltaRight / peakElevationRight;
+  return (
+    lidApertureDeltaLeft / peakElevationLeft -
+    lidApertureDeltaRight / peakElevationRight
+  );
 }
 
 export interface ExpressionSummary {
