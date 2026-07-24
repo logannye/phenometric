@@ -112,3 +112,12 @@ export {
   type ExpressionEvent,
   type ExpressionSummary
 } from "./expression-events.js";
+export type {
+  BlinkEventRecord,
+  ExpressionEventRecord,
+  PauseEventRecord,
+  PauseKind,
+  SessionEventRecords,
+  SpeechRunEventRecord,
+  SubjectSide
+} from "./kinematic-events.js";
