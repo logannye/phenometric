@@ -5,7 +5,7 @@ import {
 } from "./protocol.js";
 
 export const AMBIENT_LOCAL_CONSENT_TEXT =
-  "PhenoMetric processes camera and microphone signals locally in this browser and keeps derived results only in memory for this session. It does not upload or retain recordings, verify identity, diagnose a condition, or provide clinical interpretation. I confirm that I am the intended local participant and will use headphones when other voices may be audible.";
+  "PhenoMetrix processes camera and microphone signals locally in this browser and keeps derived results only in memory for this session. It does not upload or retain recordings, verify identity, diagnose a condition, or provide clinical interpretation. I confirm that I am the intended local participant and will use headphones when other voices may be audible.";
 
 const COMMON_WITHHELD_REASONS = [
   "modality-unavailable",
@@ -35,13 +35,18 @@ const FACE_WITHHELD_REASONS = [
 const rawProtocolPack = {
   schemaVersion: "phenometric.protocol-pack.v1",
   packId: "ambient-local-observation",
+  // 3.1.0: renamed to PhenoMetrix. No metric, threshold, or algorithm changed,
+  // but the consent text a participant reads carries the product name, so the
+  // consent digest moves and the pack version has to move with it. Sessions
+  // measured under 3.0.0 remain comparable on every measurement; what differs
+  // is the exact wording that was agreed to.
   // 3.0.0: brow geometry and per-eye closure added (5 face metrics).
   // Sessions measured under different packs are not comparable, and the
   // content digest below makes that structurally visible rather than implicit.
-  version: "3.0.0",
+  version: "3.1.0",
   // SHA-256 of the canonical pack content with this field omitted.
   contentSha256:
-    "434fc4093e9be5968c6b9a99e5d11a8830b8e852b3ee8d9d5ba6948051ef07d3",
+    "5d3ccce909f84b5a1f37e47f8d7e0b08f8cbcf6fea5cd2de09c3cf31261335a8",
   status: "nonclinical-prototype",
   maximumSessionDurationMs: 300_000,
   supportedTarget: {
@@ -61,7 +66,7 @@ const rawProtocolPack = {
   consentDocument: {
     version: "ambient-local-consent.v1",
     contentSha256:
-      "f42c01a28bea301db48ef4490a29912020f085cccf746292cabde65629ee149e"
+      "1003d8867bac07a86cf485f13a2b1d3afb120d67a01b47a1876050150634eba0"
   },
   qualityPolicy: {
     id: "ambient-local-quality.v1",

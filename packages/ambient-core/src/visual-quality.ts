@@ -3,7 +3,7 @@ import type {
   FaceCalibration,
   VisualQualityAssessment,
   VisualQualityReasonCode
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import type { FacialKinematicsFrameV1 } from "./primitives.js";
 
 export const DEFAULT_CAPTURE_QUALITY_POLICY: CaptureQualityPolicy = {

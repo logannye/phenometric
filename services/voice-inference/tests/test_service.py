@@ -3,9 +3,9 @@ import base64
 import numpy as np
 from fastapi.testclient import TestClient
 
-from phenometric_voice.adapters import DeterministicFakeWavLMAdapter
-from phenometric_voice.app import create_app
-from phenometric_voice.config import (
+from phenometrix_voice.adapters import DeterministicFakeWavLMAdapter
+from phenometrix_voice.app import create_app
+from phenometrix_voice.config import (
     WAVLM_REVISION,
     WAVLM_WEIGHT_SHA256,
 )

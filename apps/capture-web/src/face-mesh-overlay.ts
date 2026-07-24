@@ -2,7 +2,7 @@ import {
   FaceLandmarker,
   type NormalizedLandmark
 } from "@mediapipe/tasks-vision";
-import type { VisualTaskContext } from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometrix/contracts";
 import { FACE_LANDMARK_INDICES } from "./face-features.js";
 import {
   EMPTY_RESULT,

@@ -16,7 +16,7 @@ import {
   type ProtocolRef,
   type ReportSectionId,
   type WorkflowEventV1
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 export interface ProvenanceValidationResult {
   status: "pass" | "fail";

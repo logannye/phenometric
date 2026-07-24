@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Give PhenoMetric's live capture surface a GPU-accelerated holographic-depth face mesh and a multi-channel voice telemetry panel, dimmed video, and a subtle localize intro — a presentation-only upgrade that changes nothing about measurement or the privacy boundary.
+**Goal:** Give PhenoMetrix's live capture surface a GPU-accelerated holographic-depth face mesh and a multi-channel voice telemetry panel, dimmed video, and a subtle localize intro — a presentation-only upgrade that changes nothing about measurement or the privacy boundary.
 
 **Architecture:** The face mesh moves to a WebGL2 renderer inside the existing face worker, driven by a new worker-side `requestAnimationFrame` loop over cached landmarks (decoupled from ~24 Hz inference); the current 2D renderer is retained as an automatic fallback. Voice telemetry stays on the main thread, extending `LiveVoiceVisualizer` into gauges + waveforms. All new visuals read only data that already exists on the current side of every boundary.
 
@@ -20,7 +20,7 @@ Every task's requirements implicitly include this section. Values copied from `d
 - **Performance:** target 60 fps on Apple M4; degrade gracefully. MediaPipe inference cadence stays ~24 Hz — the rAF loop only redraws presentation, never re-runs inference.
 - **Scope:** capture stage only (preview + telemetry). Welcome/report screens unchanged.
 - **Worker message protocol version stays `phenometric.visual-worker-message.v2`** — the intro is computed in-worker, so no protocol change is needed.
-- **Commands:** unit `pnpm --filter @phenometric/capture-web test:unit`; typecheck `pnpm --filter @phenometric/capture-web typecheck`; build `pnpm --filter @phenometric/capture-web build`; browser `pnpm --filter @phenometric/capture-web test:browser`; full gate `pnpm test`.
+- **Commands:** unit `pnpm --filter @phenometrix/capture-web test:unit`; typecheck `pnpm --filter @phenometrix/capture-web typecheck`; build `pnpm --filter @phenometrix/capture-web build`; browser `pnpm --filter @phenometrix/capture-web test:browser`; full gate `pnpm test`.
 
 ---
 
@@ -73,7 +73,7 @@ describe("mesh depth", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/mesh-depth.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/mesh-depth.test.ts`
 Expected: FAIL — cannot resolve `./mesh-depth.js`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -137,7 +137,7 @@ export function depthToColor(
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/mesh-depth.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/mesh-depth.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -205,7 +205,7 @@ describe("localize intro", () => {
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/localize-intro.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/localize-intro.test.ts`
 Expected: FAIL — cannot resolve `./localize-intro.js`.
 
 - [ ] **Step 3: Write minimal implementation**
@@ -250,7 +250,7 @@ export class LocalizeIntro {
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/localize-intro.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/localize-intro.test.ts`
 Expected: PASS (3 tests).
 
 - [ ] **Step 5: Commit**
@@ -289,7 +289,7 @@ git commit -m "feat(capture-web): localize-intro timing helper"
 ```ts
 // apps/capture-web/src/face-mesh-renderer.ts
 import type { NormalizedLandmark } from "@mediapipe/tasks-vision";
-import type { VisualTaskContext } from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometrix/contracts";
 
 export const FACE_MESH_LANDMARK_COUNT = 478;
 
@@ -379,12 +379,12 @@ In `apps/capture-web/src/face-mesh-overlay.ts`:
 
 - [ ] **Step 3: Run the existing 2D renderer tests**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/face-mesh-overlay.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/face-mesh-overlay.test.ts`
 Expected: PASS (all existing tests unchanged — `render()` wrapper preserves behavior).
 
 - [ ] **Step 4: Typecheck**
 
-Run: `pnpm --filter @phenometric/capture-web typecheck`
+Run: `pnpm --filter @phenometrix/capture-web typecheck`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -405,7 +405,7 @@ git commit -m "refactor(capture-web): shared FaceMeshRenderer interface; 2D rend
 - Test: `apps/capture-web/src/live-voice-visualizer.test.ts` (extend)
 
 **Interfaces:**
-- Consumes: `VoiceSignalFrameV1` (from `@phenometric/ambient-core`).
+- Consumes: `VoiceSignalFrameV1` (from `@phenometrix/ambient-core`).
 - Produces (new exports from `live-voice-visualizer.ts`):
   - `LiveVoiceSample` gains `confidence: number` (0..1, clamped).
   - `levelGaugeFraction(levelDbfs: number): number` — maps `-60..0 dBFS` → `0..1`.
@@ -448,7 +448,7 @@ it("maps level and pitch onto 0..1 gauge fractions", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/live-voice-visualizer.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/live-voice-visualizer.test.ts`
 Expected: FAIL — `levelGaugeFraction`/`pitchGaugeFraction` not exported; `confidence` undefined.
 
 - [ ] **Step 3: Implement**
@@ -487,7 +487,7 @@ In `apps/capture-web/src/live-voice-visualizer.ts`:
 
 - [ ] **Step 4: Run to verify pass**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/live-voice-visualizer.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/live-voice-visualizer.test.ts`
 Expected: PASS (existing + 2 new tests).
 
 - [ ] **Step 5: Commit**
@@ -635,7 +635,7 @@ In `styles.css`, replace the `.voice-chart-block*` rules with dark telemetry sty
 
 - [ ] **Step 5: Run unit tests + typecheck + build**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/live-voice-visualizer.test.ts && pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/live-voice-visualizer.test.ts && pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build`
 Expected: unit PASS (update the existing spy fixture's `elementsFixture()` to also provide `levelGauge`, `pitchGauge`, `clarityCanvas` fake canvases — mirror the existing fake canvas objects); typecheck PASS; build PASS.
 
 - [ ] **Step 6: Commit**
@@ -686,7 +686,7 @@ describe("FaceMeshGLRenderer", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/face-mesh-gl.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/face-mesh-gl.test.ts`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Write the shaders module**
@@ -883,7 +883,7 @@ export class FaceMeshGLRenderer implements FaceMeshRenderer {
 
 - [ ] **Step 5: Run unit test + typecheck + build**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/face-mesh-gl.test.ts && pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/face-mesh-gl.test.ts && pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build`
 Expected: PASS (fallback test), typecheck PASS, build PASS. (Full visual verification happens in Task 12.)
 
 - [ ] **Step 6: Commit**
@@ -925,7 +925,7 @@ Delete all textures, framebuffers, and the quad VAO alongside the existing buffe
 
 - [ ] **Step 5: Typecheck + build**
 
-Run: `pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build`
 Expected: PASS. Visual bloom verified in Task 12.
 
 - [ ] **Step 6: Commit**
@@ -987,7 +987,7 @@ describe("MoteField", () => {
 
 - [ ] **Step 2: Run to verify failure**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/mesh-motes.test.ts`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/mesh-motes.test.ts`
 Expected: FAIL — module missing.
 
 - [ ] **Step 3: Implement `MoteField`**
@@ -1058,7 +1058,7 @@ In `face-mesh-gl.ts`: build a static contour line-index buffer from the MediaPip
 
 - [ ] **Step 5: Run mote test + typecheck + build**
 
-Run: `pnpm --filter @phenometric/capture-web exec vitest run src/mesh-motes.test.ts && pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web exec vitest run src/mesh-motes.test.ts && pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build`
 Expected: PASS / PASS / PASS.
 
 - [ ] **Step 6: Commit**
@@ -1186,7 +1186,7 @@ In `dispose`, `stopRenderLoop()`, `meshRenderer?.detach()`, `meshRenderer = null
 
 - [ ] **Step 5: Typecheck + build + existing tests**
 
-Run: `pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build && pnpm --filter @phenometric/capture-web test:unit`
+Run: `pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build && pnpm --filter @phenometrix/capture-web test:unit`
 Expected: all PASS. (`face-worker.ts` has no unit test; its behavior is covered by the browser smoke in Task 12.)
 
 - [ ] **Step 6: Commit**
@@ -1236,7 +1236,7 @@ Confirm the existing runtime sets `#face-mesh-status` text/`data-state`. Where i
 
 - [ ] **Step 3: Build + visual sanity**
 
-Run: `pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web build`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
@@ -1280,7 +1280,7 @@ Track an EMA of `dtMs`. Compute `effectLevel` (0..1): if EMA frame time > 20 ms,
 
 - [ ] **Step 4: Typecheck + build**
 
-Run: `pnpm --filter @phenometric/capture-web typecheck && pnpm --filter @phenometric/capture-web build`
+Run: `pnpm --filter @phenometrix/capture-web typecheck && pnpm --filter @phenometrix/capture-web build`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1324,12 +1324,12 @@ await expect
 
 - [ ] **Step 2: Run the browser smoke**
 
-Run: `pnpm --filter @phenometric/capture-web test:browser`
+Run: `pnpm --filter @phenometrix/capture-web test:browser`
 Expected: PASS (6+ tests; the dual-lane test now also verifies overlay + telemetry). If WebGL2 is unavailable in the CI Chrome, the worker falls back to the 2D renderer and the same assertions hold (canvas still attaches and sizes).
 
 - [ ] **Step 3: Full gate**
 
-Run: `pnpm test && pnpm --filter @phenometric/capture-web test:browser`
+Run: `pnpm test && pnpm --filter @phenometrix/capture-web test:browser`
 Expected: structure check PASS, all unit tests PASS, typecheck PASS, build PASS, browser PASS.
 
 - [ ] **Step 4: Commit**

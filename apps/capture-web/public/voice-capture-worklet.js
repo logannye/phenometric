@@ -1,4 +1,4 @@
-class PhenoMetricVoiceCaptureProcessor extends AudioWorkletProcessor {
+class PhenoMetrixVoiceCaptureProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.dataPort = null;
@@ -98,5 +98,5 @@ class PhenoMetricVoiceCaptureProcessor extends AudioWorkletProcessor {
 
 registerProcessor(
   "phenometric-voice-capture",
-  PhenoMetricVoiceCaptureProcessor
+  PhenoMetrixVoiceCaptureProcessor
 );

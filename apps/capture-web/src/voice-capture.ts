@@ -3,8 +3,8 @@ import type {
   AudioPipelineProvenance,
   AudioStreamDiagnostics,
   VoiceTaskContext
-} from "@phenometric/contracts";
-import type { VoiceSignalFrameV1 } from "@phenometric/ambient-core";
+} from "@phenometrix/contracts";
+import type { VoiceSignalFrameV1 } from "@phenometrix/ambient-core";
 import {
   isCurrentVoiceWorkerResponse,
   VOICE_WORKER_MESSAGE_VERSION,

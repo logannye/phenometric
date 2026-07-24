@@ -22,7 +22,7 @@ and interface planned
 > **Minimize features. Beautifully execute a handful of core agentic
 > capabilities.**
 
-PhenoMetric stays deliberately small. Every proposed change must strengthen one of
+PhenoMetrix stays deliberately small. Every proposed change must strengthen one of
 the existing capabilities or a required safety foundation. No new product
 capability, agent, service, or UI surface is added without an explicit,
 documented scope decision. When in doubt, defer it. Polish over breadth.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AMBIENT_LOCAL_PROTOCOL_PACK } from "@phenometric/contracts";
+import { AMBIENT_LOCAL_PROTOCOL_PACK } from "@phenometrix/contracts";
 import { AMBIENT_METRIC_REGISTRY } from "./ambient-registry.js";
 import { finalizeAmbientMetrics } from "./ambient-metrics.js";
 import {

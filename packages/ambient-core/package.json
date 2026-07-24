@@ -1,5 +1,5 @@
 {
-  "name": "@phenometric/ambient-core",
+  "name": "@phenometrix/ambient-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,7 +10,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@phenometric/contracts": "workspace:*"
+    "@phenometrix/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.7.5",

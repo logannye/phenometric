@@ -43,7 +43,7 @@ required_files=(
   "agents/evidence-card/README.md"
   "services/voice-inference/README.md"
   "services/voice-inference/pyproject.toml"
-  "services/voice-inference/phenometric_voice/app.py"
+  "services/voice-inference/phenometrix_voice/app.py"
   "services/voice-inference/tests/test_service.py"
   "services/voice-inference/uv.lock"
 )
@@ -66,8 +66,8 @@ node <<'NODE'
     fs.readFileSync("apps/capture-web/public/asset-manifest.json", "utf8")
   );
 
-  if (rootPackage.name !== "phenometric") {
-    throw new Error("The root package name must remain phenometric.");
+  if (rootPackage.name !== "phenometrix") {
+    throw new Error("The root package name must remain phenometrix.");
   }
   for (const command of [
     "check",
@@ -135,11 +135,11 @@ if [[ -n "$tracked_media" ]]; then
   exit 1
 fi
 
-pnpm --filter @phenometric/capture-web verify:assets
+pnpm --filter @phenometrix/capture-web verify:assets
 
 # The pack's contentSha256 is hand-edited hex. The runtime check compares the
 # pack against itself, so a stale digest ships to the browser and stamps every
 # observation without anything objecting. Fail the gate instead.
 npx tsx scripts/protocol-digest.mjs --check
 
-echo "PhenoMetric ambient-v3 structure and static assets are valid."
+echo "PhenoMetrix ambient-v3 structure and static assets are valid."

@@ -4,7 +4,7 @@ import type {
   VoiceTaskContext,
   VisualQualityReasonCode,
   VisualTaskContext
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 export interface VoiceSignalFrameV1 {
   schemaVersion: "phenometric.voice-signal-frame.v1";

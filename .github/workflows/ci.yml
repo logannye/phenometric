@@ -34,7 +34,7 @@ jobs:
           node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @phenometric/capture-web exec playwright install --with-deps chrome
+      - run: pnpm --filter @phenometrix/capture-web exec playwright install --with-deps chrome
       - run: pnpm test:browser
 
   voice-sidecar:

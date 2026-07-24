@@ -10,7 +10,7 @@
  * already captured, instead of requiring them to be recaptured.
  *
  * These records stay provider-side. They are deliberately NOT in
- * `@phenometric/contracts`: nothing here crosses a boundary, so nothing here
+ * `@phenometrix/contracts`: nothing here crosses a boundary, so nothing here
  * needs a Zod schema, an identity, or a place in the protocol pack.
  *
  * Naming constraint: three separate tests assert that no serialised structure

@@ -3,12 +3,12 @@
 ## Canonical checkout
 
 The canonical local checkout is `/Users/logannye/Projects/phenometric`. Use that
-path for all PhenoMetric work. Do not treat generated Codex output directories
+path for all PhenoMetrix work. Do not treat generated Codex output directories
 as working copies.
 
 ## Project posture
 
-PhenoMetric is a research and hackathon prototype, not a medical device.
+PhenoMetrix is a research and hackathon prototype, not a medical device.
 Preserve the boundary among measurement, clinical interpretation, and action.
 
 The original demo is neurological, but the project direction is a general

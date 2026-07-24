@@ -6,7 +6,7 @@ import {
   createMeasurementId,
   type MetricOutcomeV1,
   type ObservationV3
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import {
   ALGORITHM_PARAMETER_REQUIREMENT_KEYS,
   buildPostEncounterReport,

@@ -1,6 +1,6 @@
-# PhenoMetric shared contracts
+# PhenoMetrix shared contracts
 
-`@phenometric/contracts` is the runtime and TypeScript source of truth for the
+`@phenometrix/contracts` is the runtime and TypeScript source of truth for the
 standalone ambient prototype. These are engineering-prototype contracts, not
 clinical schemas.
 

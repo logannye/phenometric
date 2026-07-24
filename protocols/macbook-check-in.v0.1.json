@@ -2,7 +2,7 @@
   "id": "facial-foundation.v1",
   "status": "non-clinical-prototype",
   "captureAdapter": "macbook-browser",
-  "description": "A one-screen, completion-gated PhenoMetric facial foundation demonstration with voice used only for behavioral task gating.",
+  "description": "A one-screen, completion-gated PhenoMetrix facial foundation demonstration with voice used only for behavioral task gating.",
   "supportedTarget": "Chrome desktop on the reference MacBook",
   "consentRequired": true,
   "processing": {

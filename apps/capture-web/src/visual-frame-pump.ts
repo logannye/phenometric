@@ -1,4 +1,4 @@
-import type { VisualTaskContext } from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometrix/contracts";
 
 export const FRAME_STREAM_SCHEMA_VERSION =
   "phenometric.visual-frame-stream.v1" as const;

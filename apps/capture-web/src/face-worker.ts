@@ -11,7 +11,7 @@ import {
   AMBIENT_FACE_MAX_ROLL_DEGREES,
   AMBIENT_FACE_MAX_YAW_DEGREES,
   type FacialKinematicsFrameV1
-} from "@phenometric/ambient-core";
+} from "@phenometrix/ambient-core";
 import {
   boundingBoxForLandmarks,
   deriveFaceFeature,

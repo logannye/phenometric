@@ -1,6 +1,6 @@
 # Validation
 
-PhenoMetric has technical verification only. Automated tests do not establish
+PhenoMetrix has technical verification only. Automated tests do not establish
 analytical validity, clinical validity, clinical utility, or regulatory
 fitness.
 

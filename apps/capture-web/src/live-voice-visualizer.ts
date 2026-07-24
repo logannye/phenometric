@@ -1,4 +1,4 @@
-import type { VoiceSignalFrameV1 } from "@phenometric/ambient-core";
+import type { VoiceSignalFrameV1 } from "@phenometrix/ambient-core";
 
 export const LIVE_VOICE_WINDOW_MS = 8_000;
 export const MAX_LIVE_VOICE_SAMPLES = 800;

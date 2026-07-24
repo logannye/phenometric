@@ -1,4 +1,4 @@
-import type { VisualTaskContext } from "@phenometric/contracts";
+import type { VisualTaskContext } from "@phenometrix/contracts";
 import type {
   FacialKinematicsFrameV1,
   VoiceSignalFrameV1

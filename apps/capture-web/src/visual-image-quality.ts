@@ -1,4 +1,4 @@
-import type { FacialKinematicsFrameV1 } from "@phenometric/ambient-core";
+import type { FacialKinematicsFrameV1 } from "@phenometrix/ambient-core";
 
 export type FaceImageQuality = FacialKinematicsFrameV1["imageQuality"];
 

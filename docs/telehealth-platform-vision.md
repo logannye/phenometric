@@ -1,4 +1,4 @@
-# PhenoMetric platform vision
+# PhenoMetrix platform vision
 
 > **Current implementation note (2026-07-21):** this document describes a
 > long-term platform direction. The shipping research prototype is the
@@ -9,10 +9,10 @@
 
 ## Purpose
 
-This document defines the long-term direction for PhenoMetric, which began as
+This document defines the long-term direction for PhenoMetrix, which began as
 the NeuroTrax neurological hackathon demonstration.
 
-PhenoMetric is intended to become a reusable clinical observability layer for
+PhenoMetrix is intended to become a reusable clinical observability layer for
 telehealth: a system that converts consented audiovisual signals into
 quality-controlled, versioned, longitudinal measurements and presents those
 measurements as inspectable evidence for a clinician.
@@ -546,7 +546,7 @@ context has its own evidence and governance owner.
 
 ## Near-term success criteria
 
-Before describing PhenoMetric as a platform ready for clinical research, it
+Before describing PhenoMetrix as a platform ready for clinical research, it
 should be possible to demonstrate:
 
 - repeatable measurements across multiple sessions and supported devices;

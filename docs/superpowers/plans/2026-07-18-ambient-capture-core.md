@@ -39,7 +39,7 @@ Every task's requirements implicitly include this section. Values are copied ver
 ```text
 packages/
 ├── contracts/
-│   ├── package.json                # @phenometric/contracts
+│   ├── package.json                # @phenometrix/contracts
 │   ├── tsconfig.json
 │   └── src/
 │       ├── capture-mode.ts         # CaptureMode
@@ -48,7 +48,7 @@ packages/
 │       ├── event.ts                # AmbientActor, AmbientEventType, EventEnvelope
 │       └── index.ts                # barrel export
 └── ambient-core/
-    ├── package.json                # @phenometric/ambient-core (depends on @phenometric/contracts)
+    ├── package.json                # @phenometrix/ambient-core (depends on @phenometrix/contracts)
     ├── tsconfig.json
     ├── vitest.config.ts
     ├── fixtures/
@@ -88,7 +88,7 @@ Root changes: `package.json` scripts, `.github/workflows/ci.yml`, `.gitignore`, 
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: a runnable `pnpm -w test:unit` that executes Vitest in `packages/ambient-core`, and `@phenometric/contracts` exporting `CaptureMode`.
+- Produces: a runnable `pnpm -w test:unit` that executes Vitest in `packages/ambient-core`, and `@phenometrix/contracts` exporting `CaptureMode`.
 
 - [ ] **Step 1: Add the `.gitignore` entries for Node**
 
@@ -107,7 +107,7 @@ Create `packages/contracts/package.json`:
 
 ```json
 {
-  "name": "@phenometric/contracts",
+  "name": "@phenometrix/contracts",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -163,7 +163,7 @@ Create `packages/ambient-core/package.json`:
 
 ```json
 {
-  "name": "@phenometric/ambient-core",
+  "name": "@phenometrix/ambient-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -174,7 +174,7 @@ Create `packages/ambient-core/package.json`:
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@phenometric/contracts": "workspace:*"
+    "@phenometrix/contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "22.7.5",
@@ -229,7 +229,7 @@ Create `packages/ambient-core/src/smoke.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { AMBIENT_CORE_VERSION } from "./index.js";
-import type { CaptureMode } from "@phenometric/contracts";
+import type { CaptureMode } from "@phenometrix/contracts";
 
 describe("ambient-core toolchain", () => {
   it("exposes a version and resolves the contracts package", () => {
@@ -254,7 +254,7 @@ In root `package.json`, set `packageManager` and add scripts. The `check` script
   "packageManager": "pnpm@9.12.3",
   "scripts": {
     "check": "bash scripts/validate-structure.sh",
-    "test:unit": "pnpm -r --filter @phenometric/ambient-core test:unit",
+    "test:unit": "pnpm -r --filter @phenometrix/ambient-core test:unit",
     "test": "npm run check && npm run test:unit"
   },
   "engines": {
@@ -303,7 +303,7 @@ Expected: Vitest runs `smoke.test.ts` and reports `1 passed`.
 - [ ] **Step 9: Verify the legacy structure check still passes**
 
 Run: `npm run check`
-Expected: prints `PhenoMetric structure and event stream are valid.`
+Expected: prints `PhenoMetrix structure and event stream are valid.`
 
 - [ ] **Step 10: Commit**
 
@@ -335,7 +335,7 @@ import type {
   Abstention,
   Measurement,
   MeasurableWindow
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 describe("measurement contracts", () => {
   it("models a measurement with provenance and placeholder honesty", () => {
@@ -387,7 +387,7 @@ describe("measurement contracts", () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm -w test:unit`
-Expected: FAIL — cannot find exported types from `@phenometric/contracts`.
+Expected: FAIL — cannot find exported types from `@phenometrix/contracts`.
 
 - [ ] **Step 3: Write the contract types**
 
@@ -498,7 +498,7 @@ import { describe, expect, it } from "vitest";
 import type {
   EncounterObservation,
   EventEnvelope
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 
 describe("observation and event contracts", () => {
   it("models a per-visit aggregate observation", () => {
@@ -730,7 +730,7 @@ Expected: FAIL — cannot find `./primitives.js`.
 Create `packages/ambient-core/src/primitives.ts`:
 
 ```ts
-import type { CaptureMode } from "@phenometric/contracts";
+import type { CaptureMode } from "@phenometrix/contracts";
 
 export interface AudioFeatureFrame {
   tMs: number;
@@ -885,7 +885,7 @@ Create `packages/ambient-core/src/speech-acoustic.test.ts`:
 import { describe, expect, it } from "vitest";
 import { extractSpeechAcoustic, SPEECH_ACOUSTIC_VERSION } from "./speech-acoustic.js";
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometrix/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-speech-1",
@@ -948,7 +948,7 @@ Create `packages/ambient-core/src/speech-acoustic.ts`:
 
 ```ts
 import type { AudioFeatureFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometrix/contracts";
 import { mean, stdDev } from "./stats.js";
 
 export const SPEECH_ACOUSTIC_VERSION = "speech-acoustic-0.1";
@@ -1074,7 +1074,7 @@ Create `packages/ambient-core/src/facial-expressivity.test.ts`:
 import { describe, expect, it } from "vitest";
 import { extractFacialExpressivity, FACIAL_EXPRESSIVITY_VERSION } from "./facial-expressivity.js";
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometrix/contracts";
 
 const window: MeasurableWindow = {
   windowId: "w-face-1",
@@ -1132,7 +1132,7 @@ Create `packages/ambient-core/src/facial-expressivity.ts`:
 
 ```ts
 import type { FaceLandmarkFrame } from "./primitives.js";
-import type { Abstention, MeasurableWindow, Measurement } from "@phenometric/contracts";
+import type { Abstention, MeasurableWindow, Measurement } from "@phenometrix/contracts";
 import { mean } from "./stats.js";
 
 export const FACIAL_EXPRESSIVITY_VERSION = "facial-expressivity-0.1";
@@ -1311,7 +1311,7 @@ Create `packages/ambient-core/src/windowing.ts`:
 
 ```ts
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
-import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@phenometric/contracts";
+import type { ConfoundEnvelope, MeasurableWindow, Modality } from "@phenometrix/contracts";
 import { mean } from "./stats.js";
 
 export const MIN_WINDOW_MS = 1500;
@@ -1427,7 +1427,7 @@ Create `packages/ambient-core/src/aggregate.test.ts`:
 ```ts
 import { describe, expect, it } from "vitest";
 import { aggregateMeasurements } from "./aggregate.js";
-import type { Measurement, MeasurementContextKind } from "@phenometric/contracts";
+import type { Measurement, MeasurementContextKind } from "@phenometrix/contracts";
 
 function m(code: string, value: number): Measurement {
   return {
@@ -1478,7 +1478,7 @@ import type {
   BiomarkerAggregate,
   Measurement,
   MeasurementContextKind
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import { median, medianAbsoluteDeviation } from "./stats.js";
 
 export function aggregateMeasurements(
@@ -1586,7 +1586,7 @@ Expected: FAIL — cannot find `./events.js`.
 Create `packages/ambient-core/src/events.ts`:
 
 ```ts
-import type { AmbientActorId, AmbientEventType, EventEnvelope } from "@phenometric/contracts";
+import type { AmbientActorId, AmbientEventType, EventEnvelope } from "@phenometrix/contracts";
 
 export interface EventFactory {
   next(
@@ -1788,7 +1788,7 @@ import type {
   Measurement,
   MeasurableWindow,
   MeasurementContextKind
-} from "@phenometric/contracts";
+} from "@phenometrix/contracts";
 import type { AudioFeatureFrame, FaceLandmarkFrame, FrameStream } from "./primitives.js";
 import { detectMeasurableWindows } from "./windowing.js";
 import { extractSpeechAcoustic } from "./speech-acoustic.js";
@@ -1921,14 +1921,14 @@ export { runConductor } from "./conductor.js";
 Run:
 ```bash
 pnpm -w test:unit
-pnpm --filter @phenometric/ambient-core exec tsc --noEmit
+pnpm --filter @phenometrix/ambient-core exec tsc --noEmit
 ```
 Expected: all tests PASS; `tsc` reports no errors.
 
 - [ ] **Step 7: Verify the legacy structure check still passes**
 
 Run: `npm run check`
-Expected: prints `PhenoMetric structure and event stream are valid.`
+Expected: prints `PhenoMetrix structure and event stream are valid.`
 
 - [ ] **Step 8: Commit**
 

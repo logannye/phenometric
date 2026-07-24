@@ -35,11 +35,11 @@ From the repository root:
 
 ```bash
 pnpm dev
-pnpm --filter @phenometric/capture-web verify:assets
-pnpm --filter @phenometric/capture-web test:unit
-pnpm --filter @phenometric/capture-web typecheck
-pnpm --filter @phenometric/capture-web test:browser
-pnpm --filter @phenometric/capture-web build
+pnpm --filter @phenometrix/capture-web verify:assets
+pnpm --filter @phenometrix/capture-web test:unit
+pnpm --filter @phenometrix/capture-web typecheck
+pnpm --filter @phenometrix/capture-web test:browser
+pnpm --filter @phenometrix/capture-web build
 ```
 
 The Playwright suite injects media and worker mocks with `page.addInitScript`.
