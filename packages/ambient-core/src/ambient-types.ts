@@ -121,7 +121,15 @@ export interface AmbientMetricEvidence {
   qualifyingBinCount: number;
   activeSpeechDurationMs?: number;
   pitchedDurationMs?: number;
+  /** Voiced share of active speech. A property of phonation, not of capture. */
   pitchCoverage?: number;
+  /**
+   * Worst per-segment acquisition coverage — min(cadence, 1 - lost blocks) —
+   * across the segments backing the metric. This is what bounds the
+   * reliability of duration and rate measurements, and is deliberately
+   * distinct from {@link pitchCoverage}.
+   */
+  timingCoverage?: number;
   pauseCount?: number;
   speechRunCount?: number;
   nucleusCount?: number;

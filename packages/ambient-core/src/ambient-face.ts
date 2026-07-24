@@ -38,6 +38,8 @@ export const AMBIENT_BLINK_MAX_P95_GAP_MS = 75;
 export const AMBIENT_BLINK_MIN_CLOSURE_MS = 50;
 export const AMBIENT_BLINK_MAX_RECOVERY_MS = 800;
 export const AMBIENT_BLINK_REFRACTORY_MS = 150;
+export const AMBIENT_BLINK_CLOSURE_FRACTION = 0.6;
+export const AMBIENT_BLINK_RECOVERY_FRACTION = 0.8;
 
 const FACE_CODES: readonly AmbientFaceMetricCode[] = [
   "ambient.face.eye_aperture.left",
@@ -583,9 +585,11 @@ function detectBlinks(
       const left = frame.eyeAperture!.left;
       const right = frame.eyeAperture!.right;
       const closed =
-        left <= leftReference * 0.6 && right <= rightReference * 0.6;
+        left <= leftReference * AMBIENT_BLINK_CLOSURE_FRACTION &&
+        right <= rightReference * AMBIENT_BLINK_CLOSURE_FRACTION;
       const recovered =
-        left >= leftReference * 0.8 && right >= rightReference * 0.8;
+        left >= leftReference * AMBIENT_BLINK_RECOVERY_FRACTION &&
+        right >= rightReference * AMBIENT_BLINK_RECOVERY_FRACTION;
       if (suppressUntilRecovery) {
         if (recovered) suppressUntilRecovery = false;
       } else if (closureStartedAt === null) {

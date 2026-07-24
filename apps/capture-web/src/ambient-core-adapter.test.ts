@@ -8,6 +8,7 @@ import {
   finalizeAmbientMetrics,
   type AmbientFacialFrame,
   type AmbientMetricOutcome,
+  type AmbientVoiceFrame,
   type AmbientWithheldReasonCode
 } from "@phenometric/ambient-core";
 import {
@@ -127,6 +128,112 @@ function faceFrames(durationMs = 30_000, cadenceHz = 30): AmbientFacialFrame[] {
     }
   );
 }
+
+/**
+ * Ambient speech where only part of each run is voiced. Real continuous speech
+ * is roughly 40-70% periodic (unvoiced consonants, fricatives, stops), so
+ * `periodic` must be allowed to diverge from `speechActive` — pinning them
+ * equal hides any confusion between voicing coverage and timing coverage.
+ */
+function voiceFrames(
+  voicedFraction: number,
+  durationMs = 90_000,
+  stepMs = 10
+): AmbientVoiceFrame[] {
+  return Array.from({ length: Math.floor(durationMs / stepMs) }, (_, index) => {
+    const tMs = index * stepMs;
+    const posInCycle = tMs % 2_500;
+    const speechActive = posInCycle < 2_000;
+    const periodic = speechActive && posInCycle < 2_000 * voicedFraction;
+    return {
+      schemaVersion: "phenometric.voice-signal-frame.v1",
+      tMs,
+      acquiredAtMs: tMs,
+      captureEpoch: 1,
+      sequence: index + 1,
+      absoluteSampleIndex: Math.round(tMs * 48),
+      taskContext: "ambient-speech-turn",
+      speechActive,
+      periodic,
+      trackSegmentId: "local-microphone-1",
+      rms: speechActive ? 0.08 : 0.0002,
+      f0Hz: periodic ? 150 + Math.sin(tMs / 175) * 8 : null,
+      f0Confidence: periodic ? 0.9 : 0,
+      estimatorAgreement: periodic ? 0.9 : 0,
+      syllabicNucleus: periodic && tMs % 500 === 0,
+      clippedSampleFraction: 0,
+      dcOffset: 0.001,
+      snrDb: speechActive ? 26 : 0,
+      sampleRateHz: 48_000,
+      blockGapMs: stepMs,
+      lostBlockFraction: 0,
+      browserProcessing: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false
+      },
+      qualityReasons: speechActive ? [] : ["signal-too-quiet"],
+      processorRef: "browser-voice-dsp@1.0"
+    };
+  });
+}
+
+function voiceObservation(voicedFraction: number) {
+  return buildAmbientObservation({
+    sessionId: "session-adapter",
+    subjectRef: "subject-session-adapter",
+    consent: consent(),
+    startedAt: "2026-07-20T17:00:00.000Z",
+    endedAt: "2026-07-20T17:01:30.000Z",
+    durationMs: 90_000,
+    voiceFrames: voiceFrames(voicedFraction),
+    faceFrames: [],
+    noiseCalibrationDurationMs: 2_000,
+    faceCalibration: null,
+    voiceLaneAvailable: true,
+    faceLaneAvailable: false,
+    processors: []
+  });
+}
+
+const TIMING_CODES = [
+  "ambient.voice.speech_activity_fraction",
+  "ambient.voice.pause_rate",
+  "ambient.voice.pause_duration.median",
+  "ambient.voice.speech_run_duration.median"
+] as const;
+
+describe("speech-timing evidence is gated on timing coverage, not voicing", () => {
+  // Regression: `minimumTimingCoverage` (0.9) once resolved to `pitchCoverage`
+  // (voiced fraction of active speech) because nothing emitted a
+  // `timingCoverage` fact. Ordinary part-voiced speech then failed provenance
+  // and the whole session was discarded — and only on the success path, since
+  // evidence requirements are checked for measured outcomes only.
+  it.each([1, 0.6, 0.4])(
+    "builds a valid report when only %s of active speech is voiced",
+    (voicedFraction) => {
+      const observation = voiceObservation(voicedFraction);
+      const timing = observation.metricOutcomes.filter((outcome) =>
+        (TIMING_CODES as readonly string[]).includes(outcome.metricCode)
+      );
+      expect(timing).toHaveLength(TIMING_CODES.length);
+      expect(timing.every((outcome) => outcome.status === "measured")).toBe(true);
+      expect(
+        validateObservationProvenance(observation, AMBIENT_LOCAL_PROTOCOL_PACK)
+      ).toEqual({ status: "pass", errors: [] });
+    }
+  );
+
+  it("reports timing coverage independently of pitch coverage", () => {
+    const outcome = voiceObservation(0.6).metricOutcomes.find(
+      (candidate) => candidate.metricCode === "ambient.voice.pause_rate"
+    );
+    expect(outcome?.evidence.qualityFacts.pitchCoverage).toBeCloseTo(0.6, 2);
+    expect(
+      outcome?.evidence.qualityFacts.timingCoverage
+    ).toBeGreaterThanOrEqual(0.9);
+  });
+});
 
 describe("ambient observation adapter", () => {
   it("projects empty capture into 16 traceable withheld outcomes", () => {

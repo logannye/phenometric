@@ -130,6 +130,7 @@ function qualityFacts(evidence: AmbientMetricEvidence): Record<string, number> {
     ["activeSpeechDurationMs", evidence.activeSpeechDurationMs],
     ["pitchedDurationMs", evidence.pitchedDurationMs],
     ["pitchCoverage", evidence.pitchCoverage],
+    ["timingCoverage", evidence.timingCoverage],
     ["pauseCount", evidence.pauseCount],
     ["speechRunCount", evidence.speechRunCount],
     ["nucleusCount", evidence.nucleusCount],

@@ -29,6 +29,13 @@ export const AMBIENT_VOICE_ACTIVE_MIN_MS = 15_000;
 export const AMBIENT_VOICE_PITCH_MIN_MS = 10_000;
 export const AMBIENT_VOICE_MIN_SEGMENTS = 3;
 export const AMBIENT_VOICE_MIN_PITCH_COVERAGE = 0.6;
+export const AMBIENT_VOICE_MIN_SEGMENT_COVERAGE = 0.9;
+export const AMBIENT_VOICE_MIN_F0_HZ = 50;
+export const AMBIENT_VOICE_MAX_F0_HZ = 700;
+export const AMBIENT_VOICE_MIN_ESTIMATOR_QUALITY = 0.55;
+export const AMBIENT_VOICE_MIN_ESTIMATOR_AGREEMENT = 0.7;
+export const AMBIENT_VOICE_PITCH_BIN_MS = 500;
+export const AMBIENT_VOICE_MIN_VALID_BINS_PER_SEGMENT = 4;
 export const AMBIENT_VOICE_MIN_SAMPLE_RATE_HZ = 44_100;
 export const AMBIENT_VOICE_MAX_GAP_MS = 40;
 export const AMBIENT_VOICE_MAX_LOST_BLOCK_FRACTION = 0.05;
@@ -133,12 +140,12 @@ function validPitch(frame: PreparedVoiceFrame): boolean {
     frame.periodic &&
     f0 !== null &&
     finite(f0) &&
-    f0 >= 50 &&
-    f0 <= 700 &&
+    f0 >= AMBIENT_VOICE_MIN_F0_HZ &&
+    f0 <= AMBIENT_VOICE_MAX_F0_HZ &&
     finite(frame.frame.f0Confidence) &&
-    frame.frame.f0Confidence >= 0.55 &&
+    frame.frame.f0Confidence >= AMBIENT_VOICE_MIN_ESTIMATOR_QUALITY &&
     finite(frame.frame.estimatorAgreement) &&
-    frame.frame.estimatorAgreement >= 0.7
+    frame.frame.estimatorAgreement >= AMBIENT_VOICE_MIN_ESTIMATOR_AGREEMENT
   );
 }
 
@@ -193,7 +200,7 @@ function segmentFromFrames(
   if (
     durationMs < AMBIENT_VOICE_SEGMENT_MIN_MS ||
     activeDurationMs < AMBIENT_VOICE_ACTIVE_PER_SEGMENT_MIN_MS ||
-    coverage < 0.9
+    coverage < AMBIENT_VOICE_MIN_SEGMENT_COVERAGE
   ) {
     return null;
   }
@@ -283,7 +290,9 @@ function semitoneStdDev(values: readonly number[]): number {
 function validPitchSubwindows(segment: VoiceSegment): number[][] {
   const bins = new Map<number, PreparedVoiceFrame[]>();
   for (const frame of segment.frames) {
-    const index = Math.floor((frame.frame.tMs - segment.startMs) / 500);
+    const index = Math.floor(
+      (frame.frame.tMs - segment.startMs) / AMBIENT_VOICE_PITCH_BIN_MS
+    );
     const bucket = bins.get(index) ?? [];
     bucket.push(frame);
     bins.set(index, bucket);
@@ -373,6 +382,14 @@ function evidenceFor(
       activeSpeechDurationMs > 0
         ? pitchedDurationMs / activeSpeechDurationMs
         : 0,
+    // Worst contributing segment bounds the timing evidence. Every accepted
+    // segment already cleared AMBIENT_VOICE_MIN_SEGMENT_COVERAGE, so this
+    // lets the report layer re-verify that gate on the same statistic
+    // rather than inferring it from voicing.
+    timingCoverage:
+      segments.length > 0
+        ? Math.min(...segments.map((segment) => segment.coverage))
+        : undefined,
     processorRefs: sortedUnique(
       segments.length > 0
         ? segments.map((segment) => segment.processorRef)
@@ -550,7 +567,7 @@ export function extractAmbientVoiceMetrics(
     "ambient.voice.f0.variability";
   const variabilitySegments = pitchSegments.flatMap((segment) => {
     const subwindows = validPitchSubwindows(segment);
-    return subwindows.length >= 4
+    return subwindows.length >= AMBIENT_VOICE_MIN_VALID_BINS_PER_SEGMENT
       ? [
           semitoneStdDev(
             subwindows.map((values) => median(values))

@@ -133,7 +133,10 @@ function evidenceFactFor(
     case "minimumActiveSpeechPerSegmentMs":
       return qualityNumber("minimumActiveSpeechPerSegmentMs");
     case "minimumTimingCoverage":
-      return qualityNumber("timingCoverage") ?? outcome.evidence.coverage ?? undefined;
+      // No fallback to `evidence.coverage`: that field carries pitch coverage,
+      // a voicing statistic, and comparing it against a timing threshold
+      // failed provenance for ordinary part-voiced speech.
+      return qualityNumber("timingCoverage");
     case "minimumEventsForMedian":
     case "minimumNuclei":
       return outcome.evidence.eventCount;
