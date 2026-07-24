@@ -16,7 +16,7 @@ export const FACE_LANDMARKER_MODEL_PATH =
 export const FACE_LANDMARKER_MODEL_SHA256 =
   "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff" as const;
 export const FACE_LANDMARKER_GEOMETRY_VERSION =
-  "bilateral-geometry-v1" as const;
+  "bilateral-geometry-v2" as const;
 
 export function visualPipelineProvenance(
   delegate: "GPU" | "CPU",

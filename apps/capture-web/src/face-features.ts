@@ -15,7 +15,13 @@ import type { FaceImageQuality } from "./visual-image-quality.js";
 
 export const FACIAL_KINEMATICS_SCHEMA_VERSION =
   "phenometric.facial-kinematics-frame.v1" as const;
-export const FACE_GEOMETRY_VERSION = "bilateral-geometry-v1" as const;
+/*
+ * v2: palpebral fissure dimensions, mouth midline offset, and iris-derived gaze
+ * and limbus diameter are derived. Existing values are unchanged -- this is
+ * additive -- but a frame stamped v1 does not carry the new fields, and the
+ * version is what says which.
+ */
+export const FACE_GEOMETRY_VERSION = "bilateral-geometry-v2" as const;
 
 export const FACE_LANDMARK_INDICES = {
   subjectLeftEye: {
@@ -433,9 +439,86 @@ export function irisGeometry(
   }
   const diameter =
     (2 * (radiusTotal / indices.ring.length)) / system.scale;
+  // A ring collapsed onto its centre is not an iris. That is what an absent
+  // iris head looks like when the array is padded rather than truncated, and
+  // reporting a zero-diameter iris with a confident gaze would be worse than
+  // reporting nothing.
+  if (diameter <= 0) return null;
   return finite(gazeX) && finite(gazeY) && finite(diameter)
     ? { gazeX, gazeY, diameter }
     : null;
+}
+
+/**
+ * The bilateral derivations that need a coordinate system, gathered so the
+ * frame builder stays readable.
+ *
+ * Each field independently resolves to null when its own points are missing, so
+ * a model without the iris head still yields fissure and midline values rather
+ * than dropping the whole group.
+ */
+function bilateralGeometry(
+  landmarks: NormalizedLandmark[],
+  system: FaceCoordinateSystem | null,
+  input: FaceFeatureInput
+): Pick<
+  FacialKinematicsFrameV1,
+  "fissureWidth" | "fissureHeight" | "mouthMidlineOffset" | "gazeOffset" | "irisDiameter"
+> {
+  const empty = {
+    fissureWidth: null,
+    fissureHeight: null,
+    mouthMidlineOffset: null,
+    gazeOffset: null,
+    irisDiameter: null
+  };
+  if (!system) return empty;
+  const { frameWidth, frameHeight } = input;
+
+  const leftFissure = palpebralFissure(
+    landmarks, FACE_LANDMARK_INDICES.subjectLeftEye, system, frameWidth, frameHeight
+  );
+  const rightFissure = palpebralFissure(
+    landmarks, FACE_LANDMARK_INDICES.subjectRightEye, system, frameWidth, frameHeight
+  );
+  const leftIris = irisGeometry(
+    landmarks,
+    FACE_LANDMARK_INDICES.subjectLeftIris,
+    FACE_LANDMARK_INDICES.subjectLeftEye.canthi,
+    system,
+    frameWidth,
+    frameHeight
+  );
+  const rightIris = irisGeometry(
+    landmarks,
+    FACE_LANDMARK_INDICES.subjectRightIris,
+    FACE_LANDMARK_INDICES.subjectRightEye.canthi,
+    system,
+    frameWidth,
+    frameHeight
+  );
+  const bilateral = leftFissure && rightFissure;
+  const bothIris = leftIris && rightIris;
+  return {
+    fissureWidth: bilateral
+      ? { left: leftFissure.width, right: rightFissure.width }
+      : null,
+    fissureHeight: bilateral
+      ? { left: leftFissure.height, right: rightFissure.height }
+      : null,
+    mouthMidlineOffset: mouthMidlineOffset(
+      landmarks, system, frameWidth, frameHeight
+    ),
+    gazeOffset: bothIris
+      ? {
+          left: { x: leftIris.gazeX, y: leftIris.gazeY },
+          right: { x: rightIris.gazeX, y: rightIris.gazeY }
+        }
+      : null,
+    irisDiameter: bothIris
+      ? { left: leftIris.diameter, right: rightIris.diameter }
+      : null
+  };
 }
 
 function browHeight(
@@ -613,6 +696,11 @@ function baseFrame(
     browHeight: null,
     mouthCorners: null,
     mouthApertureRatio: null,
+    fissureWidth: null,
+    fissureHeight: null,
+    mouthMidlineOffset: null,
+    gazeOffset: null,
+    irisDiameter: null,
     regionalMovementSpeed: null,
     imageQuality: input.imageQuality,
     analyzedFrameRate: input.analyzedFrameRate,
@@ -757,6 +845,7 @@ export function deriveFaceFeature(
       input.frameWidth,
       input.frameHeight
     ),
+    ...bilateralGeometry(landmarks, system, input),
     regionalMovementSpeed: movementSpeed(
       motionPoints,
       input.acquiredAtMs,

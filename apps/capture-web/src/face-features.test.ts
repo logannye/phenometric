@@ -601,3 +601,58 @@ describe("iris geometry", () => {
     ).toBeNull();
   });
 });
+
+describe("frame carries the derived bilateral geometry", () => {
+  function irisLandmarks(): NormalizedLandmark[] {
+    const marks = neutralLandmarks();
+    const ring = (cx: number, cy: number, r: number) => [
+      { x: cx - r, y: cy },
+      { x: cx, y: cy - r * (WIDTH / HEIGHT) },
+      { x: cx + r, y: cy },
+      { x: cx, y: cy + r * (WIDTH / HEIGHT) }
+    ];
+    marks[468] = point(0.42, 0.4);
+    ring(0.42, 0.4, 0.012).forEach((p, i) => {
+      marks[469 + i] = point(p.x, p.y);
+    });
+    marks[473] = point(0.58, 0.4);
+    ring(0.58, 0.4, 0.012).forEach((p, i) => {
+      marks[474 + i] = point(p.x, p.y);
+    });
+    return marks;
+  }
+
+  it("emits fissure dimensions and midline offset for a visible face", () => {
+    const frame = frameFor(neutralLandmarks());
+    expect(frame.fissureWidth).not.toBeNull();
+    expect(frame.fissureHeight).not.toBeNull();
+    expect(frame.fissureWidth!.left).toBeCloseTo(0.5, 6);
+    expect(frame.mouthMidlineOffset).toBeCloseTo(0, 9);
+  });
+
+  it("emits gaze and limbus diameter when the iris head is present", () => {
+    const frame = frameFor(irisLandmarks());
+    expect(frame.gazeOffset).not.toBeNull();
+    expect(frame.irisDiameter).not.toBeNull();
+    expect(frame.irisDiameter!.left).toBeGreaterThan(0);
+    expect(frame.gazeOffset!.left.x).toBeCloseTo(0, 6);
+  });
+
+  it("abstains on gaze when the iris points are degenerate", () => {
+    // The default fill puts every unset landmark at the same coordinate, which
+    // is what an absent iris head looks like when the array is padded rather
+    // than truncated. A zero-radius iris must not yield a confident gaze.
+    const frame = frameFor(neutralLandmarks());
+    expect(frame.gazeOffset).toBeNull();
+    expect(frame.irisDiameter).toBeNull();
+  });
+
+  it("nulls every derived field when no face is visible", () => {
+    const frame = deriveFaceFeature(nativeResult(null), input()).frame;
+    expect(frame.fissureWidth).toBeNull();
+    expect(frame.fissureHeight).toBeNull();
+    expect(frame.mouthMidlineOffset).toBeNull();
+    expect(frame.gazeOffset).toBeNull();
+    expect(frame.irisDiameter).toBeNull();
+  });
+});

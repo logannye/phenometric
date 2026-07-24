@@ -279,13 +279,13 @@ export async function installAmbientBrowserFixture(
               type: "ready",
               captureEpoch,
               provenance: {
-                processorRef: "mediapipe-face-landmarker:0.10.35:fixture:bilateral-geometry-v1:cpu",
+                processorRef: "mediapipe-face-landmarker:0.10.35:fixture:bilateral-geometry-v2:cpu",
                 runtime: "mediapipe-tasks-vision",
                 mediaPipeVersion: "0.10.35",
                 modelAsset: "models/face_landmarker.task",
                 modelSha256: "64184e229b263107bc2b804c6625db1341ff2bb731874b0bcc2fe6544e0bc9ff",
                 delegate: "CPU",
-                geometryVersion: "bilateral-geometry-v1"
+                geometryVersion: "bilateral-geometry-v2"
               },
               videoCaptureSettings: message.videoCaptureSettings
             });

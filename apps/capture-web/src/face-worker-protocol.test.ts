@@ -20,7 +20,7 @@ describe("visual worker protocol", () => {
       modelAsset: "models/face_landmarker.task",
       modelSha256: FACE_LANDMARKER_MODEL_SHA256,
       delegate: "GPU",
-      geometryVersion: "bilateral-geometry-v1"
+      geometryVersion: "bilateral-geometry-v2"
     });
     expect(provenance.processorRef).toContain("gpu");
   });
