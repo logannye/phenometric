@@ -100,3 +100,17 @@ export {
 } from "./visual-quality.js";
 export { createEventFactory } from "./events.js";
 export type { EventFactory } from "./events.js";
+
+export {
+  EXPRESSION_MIN_EVENTS,
+  EXPRESSION_ONSET_ELEVATION,
+  SYNKINESIS_MIN_ELEVATION,
+  detectExpressionEvents,
+  excursionAsymmetry,
+  restingBaseline,
+  summarizeExpressions,
+  synkinesisIndex,
+  type ExpressionBaseline,
+  type ExpressionEvent,
+  type ExpressionSummary
+} from "./expression-events.js";

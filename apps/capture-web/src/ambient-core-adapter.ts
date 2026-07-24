@@ -135,7 +135,9 @@ function qualityFacts(evidence: AmbientMetricEvidence): Record<string, number> {
     ["speechRunCount", evidence.speechRunCount],
     ["nucleusCount", evidence.nucleusCount],
     ["frontalExposureMs", evidence.frontalExposureMs],
-    ["blinkCount", evidence.blinkCount]
+    ["blinkCount", evidence.blinkCount],
+    ["expressionEventCount", evidence.expressionEventCount],
+    ["coupledExpressionEventCount", evidence.coupledExpressionEventCount]
   ];
   for (const [name, value] of optional) {
     if (value !== undefined && Number.isFinite(value)) facts[name] = value;

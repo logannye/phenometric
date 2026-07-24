@@ -39,6 +39,10 @@ import {
   AMBIENT_FACE_MIN_SAMPLES_PER_BIN,
   AMBIENT_FACE_MIN_SPAN_MS
 } from "./ambient-face.js";
+import {
+  EXPRESSION_MIN_EVENTS,
+  SYNKINESIS_MIN_ELEVATION
+} from "./expression-events.js";
 
 describe("finalizeAmbientMetrics", () => {
   it("returns every registered metric exactly once in registry order", () => {
@@ -150,6 +154,10 @@ describe("finalizeAmbientMetrics", () => {
       refractoryMs: AMBIENT_BLINK_REFRACTORY_MS,
       closureFractionOfOpenReference: AMBIENT_BLINK_CLOSURE_FRACTION,
       recoveryFractionOfOpenReference: AMBIENT_BLINK_RECOVERY_FRACTION,
+      // expression dynamics
+      minimumExpressionEvents: EXPRESSION_MIN_EVENTS,
+      minimumCoupledExpressionEvents: EXPRESSION_MIN_EVENTS,
+      minimumCouplingElevation: SYNKINESIS_MIN_ELEVATION,
       // the analysis bin differs by modality
       binDurationMs: {
         voice: AMBIENT_VOICE_PITCH_BIN_MS,

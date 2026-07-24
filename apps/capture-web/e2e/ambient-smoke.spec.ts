@@ -149,8 +149,8 @@ test("ambient finalization creates the bounded report without upload or persiste
   await expect(page.locator("#report-title")).toHaveText(
     "Ambient session measurement report"
   );
-  await expect(page.locator(".report-section")).toHaveCount(8);
-  await expect(page.locator(".metric-row")).toHaveCount(16);
+  await expect(page.locator(".report-section")).toHaveCount(9);
+  await expect(page.locator(".metric-row")).toHaveCount(22);
   await expect(page.locator("#report-boundary")).toContainText(
     "not intended for medical decisions or longitudinal comparison"
   );
