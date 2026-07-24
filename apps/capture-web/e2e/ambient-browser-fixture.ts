@@ -369,7 +369,7 @@ export async function installAmbientBrowserFixture(
               type: "ready",
               captureEpoch,
               provenance: {
-                processorRef: "browser-voice-dsp@1.0",
+                processorRef: "browser-voice-dsp@1.1",
                 runtime: "audio-worklet-voice-worker",
                 workletSchemaVersion: "phenometric.voice-worklet-message.v1",
                 workerSchemaVersion: workerVersion,
@@ -415,7 +415,7 @@ export async function installAmbientBrowserFixture(
                     autoGainControl: false
                   },
                   qualityReasons: [],
-                  processorRef: "browser-voice-dsp@1.0"
+                  processorRef: "browser-voice-dsp@1.1"
                 }
               });
             }
@@ -464,7 +464,7 @@ export async function installAmbientBrowserFixture(
                   autoGainControl: false
                 },
                 qualityReasons: [],
-                processorRef: "browser-voice-dsp@1.0"
+                processorRef: "browser-voice-dsp@1.1"
               }
             });
           };
@@ -474,12 +474,26 @@ export async function installAmbientBrowserFixture(
             rms: 0.002,
             f0Hz: null
           }), 0);
-          this.schedule(() => emitAmbientFrame(1, {
-            speechActive: true,
-            periodic: false,
-            rms: 0.04,
-            f0Hz: null
-          }), 400);
+          /*
+           * The unvoiced phase is emitted as a run of frames rather than one,
+           * because the live dashboard commits a state only after
+           * LIVE_VOICE_BALLISTICS.stateDwellMs of consistent input. A single
+           * frame leaves the gate driven by one sample across a 400 ms gap,
+           * which commits on an unloaded machine and races on a loaded one --
+           * the same commit passed one CI run and failed another on exactly
+           * this assertion.
+           *
+           * Keeping the phase boundaries where they are matters: later
+           * assertions depend on the voiced burst still arriving at 1000 ms.
+           */
+          for (let offsetMs = 400; offsetMs < 800; offsetMs += 50) {
+            this.schedule(() => emitAmbientFrame(1, {
+              speechActive: true,
+              periodic: false,
+              rms: 0.04,
+              f0Hz: null
+            }), offsetMs);
+          }
           this.schedule(() => emitAmbientFrame(2, {
             speechActive: true,
             periodic: true,
