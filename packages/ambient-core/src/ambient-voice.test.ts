@@ -265,3 +265,45 @@ describe("extractAmbientVoiceMetrics", () => {
     expect(result.ignoredFrameCount).toBe(1);
   });
 });
+
+describe("pause and speech-run events", () => {
+  it("records every pause, including ones the published metrics filter out", () => {
+    // The duration metrics keep only pauses in [200, 1999] ms and drop the
+    // leading and trailing quiet. Those exclusions are correct for a median but
+    // wrong for a record: a pause that was filtered away is indistinguishable
+    // from one that never happened.
+    const result = extractAmbientVoiceMetrics(ambientVoiceFrames(), OPTIONS);
+    const pauses = result.events?.pauses ?? [];
+    expect(pauses.length).toBeGreaterThan(0);
+    for (const pause of pauses) {
+      expect(pause.endMs).toBeGreaterThanOrEqual(pause.startMs);
+      expect(["breath", "hesitation", "truncated"]).toContain(pause.kind);
+    }
+    // Window-bounded quiet is retained under its own kind rather than dropped.
+    expect(pauses.some((pause) => pause.kind === "truncated")).toBe(true);
+  });
+
+  it("records speech runs with phonated time separated from duration", () => {
+    // A run can be long while little of it is voiced; the ratio is a different
+    // quantity from either, and neither is recoverable from a median duration.
+    const result = extractAmbientVoiceMetrics(ambientVoiceFrames(), OPTIONS);
+    const runs = result.events?.speechRuns ?? [];
+    expect(runs.length).toBeGreaterThan(0);
+    for (const run of runs) {
+      expect(run.durationMs).toBeGreaterThan(0);
+      expect(run.phonatedMs).toBeLessThanOrEqual(run.durationMs);
+      expect(run.peakIntensity).toBeGreaterThanOrEqual(run.meanIntensity);
+    }
+  });
+
+  it("leaves the published pause metrics untouched by the split", () => {
+    // The rewrite must not move an existing number. The filtered durations are
+    // computed exactly as before, alongside the unfiltered records.
+    const outcome = extractAmbientVoiceMetrics(
+      ambientVoiceFrames(),
+      OPTIONS
+    ).outcomes.find((candidate) => candidate.code === "ambient.voice.pause_rate");
+    expect(outcome?.status).toBe("measured");
+    expect(outcome?.evidence.pauseCount).toBeGreaterThan(0);
+  });
+});

@@ -1,3 +1,8 @@
+import type {
+  PauseEventRecord,
+  PauseKind,
+  SpeechRunEventRecord
+} from "./kinematic-events.js";
 import {
   median,
   medianAbsoluteDeviation,
@@ -316,29 +321,148 @@ function validPitchSubwindows(segment: VoiceSegment): number[][] {
   });
 }
 
-function internalRuns(segment: VoiceSegment): RunDurations {
+/**
+ * Ratio of peak to floor RMS within a pause that marks it as containing an
+ * inspiration.
+ *
+ * This is an ACOUSTIC PROXY, not a respiratory measurement. An audible breath
+ * raises energy without periodicity, so a silence holding one is not flat. It
+ * has not been validated against any respiratory reference, and a throat clear,
+ * a chair creak, or a second speaker would satisfy it equally.
+ */
+export const AMBIENT_VOICE_BREATH_RMS_RATIO = 2.5;
+/** Shortest pause that could plausibly contain an inspiration. */
+export const AMBIENT_VOICE_MIN_BREATH_MS = 150;
+
+interface SegmentRuns {
+  runs: SpeechRunEventRecord[];
+  pauses: PauseEventRecord[];
+  /** Durations for the published metrics, filtered exactly as before. */
+  durations: RunDurations;
+}
+
+/**
+ * Ordered speech runs and pauses, with each pause classified.
+ *
+ * Previously this collapsed straight to two unordered duration arrays, which
+ * discarded the alternation -- the rhythm of the speech -- and dropped every
+ * pause outside [200, 1999] ms without recording that it happened. An
+ * unobserved pause was then indistinguishable from a pause that did not occur.
+ *
+ * Splitting breath from hesitation turns one detector into two clinical
+ * channels out of the same event stream: respiratory load and cognitive
+ * retrieval. See {@link AMBIENT_VOICE_BREATH_RMS_RATIO} for how weak that split
+ * currently is.
+ */
+function internalRuns(segment: VoiceSegment): SegmentRuns {
   const weights = frameWeightsMs(segment.frames);
-  const raw: Array<{ active: boolean; durationMs: number }> = [];
+  interface RawRun {
+    active: boolean;
+    durationMs: number;
+    startIndex: number;
+    endIndex: number;
+  }
+  const raw: RawRun[] = [];
   for (let index = 0; index < segment.frames.length; index += 1) {
     const active = segment.frames[index].speechActive;
     const prior = raw.at(-1);
-    if (prior?.active === active) prior.durationMs += weights[index];
-    else raw.push({ active, durationMs: weights[index] });
+    if (prior?.active === active) {
+      prior.durationMs += weights[index];
+      prior.endIndex = index;
+    } else {
+      raw.push({
+        active,
+        durationMs: weights[index],
+        startIndex: index,
+        endIndex: index
+      });
+    }
   }
+
+  const timeAt = (index: number) => segment.frames[index].frame.tMs;
+  const rmsOf = (index: number) => {
+    const value = segment.frames[index].frame.rms;
+    return finite(value) ? value : 0;
+  };
+
+  const runs: SpeechRunEventRecord[] = [];
+  const pauses: PauseEventRecord[] = [];
+  for (let position = 0; position < raw.length; position += 1) {
+    const run = raw[position];
+    const startMs = timeAt(run.startIndex);
+    const endMs = timeAt(run.endIndex);
+    if (run.active) {
+      let phonatedMs = 0;
+      let nucleusCount = 0;
+      let intensityTotal = 0;
+      let peakIntensity = 0;
+      for (let index = run.startIndex; index <= run.endIndex; index += 1) {
+        if (segment.frames[index].periodic) phonatedMs += weights[index];
+        if (segment.frames[index].frame.syllabicNucleus) nucleusCount += 1;
+        const level = rmsOf(index);
+        intensityTotal += level;
+        peakIntensity = Math.max(peakIntensity, level);
+      }
+      const frameCount = run.endIndex - run.startIndex + 1;
+      runs.push({
+        startMs,
+        endMs,
+        durationMs: run.durationMs,
+        phonatedMs,
+        nucleusCount,
+        // Clamped to the peak. Summing identical values accumulates enough
+        // floating-point error to put the mean a few ulps above the maximum,
+        // and a mean above its own maximum is not a number worth emitting.
+        meanIntensity: Math.min(
+          peakIntensity,
+          intensityTotal / Math.max(1, frameCount)
+        ),
+        peakIntensity
+      });
+      continue;
+    }
+
+    // Leading and trailing quiet is bounded by the window, so its true extent
+    // is unknown. Recorded rather than dropped: silently filtering it made an
+    // unobserved pause look like an absent one.
+    const truncated = position === 0 || position === raw.length - 1;
+    let kind: PauseKind = "hesitation";
+    if (truncated) {
+      kind = "truncated";
+    } else if (run.durationMs >= AMBIENT_VOICE_MIN_BREATH_MS) {
+      let floor = Number.POSITIVE_INFINITY;
+      let peak = 0;
+      for (let index = run.startIndex; index <= run.endIndex; index += 1) {
+        const level = rmsOf(index);
+        floor = Math.min(floor, level);
+        peak = Math.max(peak, level);
+      }
+      if (floor > 0 && peak >= floor * AMBIENT_VOICE_BREATH_RMS_RATIO) {
+        kind = "breath";
+      }
+    }
+    pauses.push({ startMs, endMs, durationMs: run.durationMs, kind });
+  }
+
   return {
-    speechRunsMs: raw
-      .filter((run) => run.active)
-      .map((run) => run.durationMs),
-    // Leading and trailing quiet are exposure, not a pause between speech runs.
-    pausesMs: raw
-      .slice(1, -1)
-      .filter(
-        (run) =>
-          !run.active &&
-          run.durationMs >= AMBIENT_VOICE_MIN_PAUSE_MS &&
-          run.durationMs <= AMBIENT_VOICE_MAX_PAUSE_MS
-      )
-      .map((run) => run.durationMs)
+    runs,
+    pauses,
+    durations: {
+      speechRunsMs: raw
+        .filter((run) => run.active)
+        .map((run) => run.durationMs),
+      // Unchanged: the published pause metrics keep the same window and the
+      // same leading/trailing exclusion they always had.
+      pausesMs: raw
+        .slice(1, -1)
+        .filter(
+          (run) =>
+            !run.active &&
+            run.durationMs >= AMBIENT_VOICE_MIN_PAUSE_MS &&
+            run.durationMs <= AMBIENT_VOICE_MAX_PAUSE_MS
+        )
+        .map((run) => run.durationMs)
+    }
   };
 }
 
@@ -648,8 +772,14 @@ export function extractAmbientVoiceMetrics(
   }
 
   const runsBySegment = segments.map((segment) => internalRuns(segment));
-  const pauses = runsBySegment.flatMap((runs) => runs.pausesMs);
-  const speechRuns = runsBySegment.flatMap((runs) => runs.speechRunsMs);
+  const pauses = runsBySegment.flatMap((runs) => runs.durations.pausesMs);
+  const speechRuns = runsBySegment.flatMap(
+    (runs) => runs.durations.speechRunsMs
+  );
+  // Tier-2 records: every run and every pause, ordered and unfiltered, beside
+  // the filtered durations the published metrics use.
+  const pauseEvents = runsBySegment.flatMap((runs) => runs.pauses);
+  const speechRunEvents = runsBySegment.flatMap((runs) => runs.runs);
   const nucleiBySegment = segments.map(
     (segment) =>
       segment.frames.filter(
@@ -711,7 +841,7 @@ export function extractAmbientVoiceMetrics(
   } else {
     const rates = segments.map((segment, index) =>
       segment.durationMs > 0
-        ? runsBySegment[index].pausesMs.length /
+        ? runsBySegment[index].durations.pausesMs.length /
           (segment.durationMs / 60_000)
         : 0
     );
@@ -742,7 +872,7 @@ export function extractAmbientVoiceMetrics(
     );
   } else {
     const perSegment = runsBySegment.flatMap((runs) =>
-      runs.pausesMs.length > 0 ? [median(runs.pausesMs) / 1_000] : []
+      runs.durations.pausesMs.length > 0 ? [median(runs.durations.pausesMs) / 1_000] : []
     );
     outcomes.push(
       measuredOutcome(
@@ -774,8 +904,8 @@ export function extractAmbientVoiceMetrics(
     );
   } else {
     const perSegment = runsBySegment.flatMap((runs) =>
-      runs.speechRunsMs.length > 0
-        ? [median(runs.speechRunsMs) / 1_000]
+      runs.durations.speechRunsMs.length > 0
+        ? [median(runs.durations.speechRunsMs) / 1_000]
         : []
     );
     outcomes.push(
@@ -830,6 +960,7 @@ export function extractAmbientVoiceMetrics(
   });
   return {
     outcomes: ordered,
-    ignoredFrameCount
+    ignoredFrameCount,
+    events: { pauses: pauseEvents, speechRuns: speechRunEvents }
   };
 }
