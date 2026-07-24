@@ -121,7 +121,28 @@ disabled-by-default research surface. The browser does not import or call it.
 - narrative generation or human approval/dismissal;
 - authentication, PHI workflows, EHR/FHIR integration, or export;
 - diagnosis, progression classification, risk prediction, or treatment advice;
-- analytical or clinical validation against a reference standard.
+- analytical or clinical validation against a reference standard;
+- clinical protocol packs, including the designed-but-unbuilt facial palsy pack
+  (see below).
+
+## Refused capability
+
+Acute stroke screening is a standing product boundary, not a gap. Forehead
+sparing—the discriminator between central and peripheral facial weakness—is not
+measurable here, and an ambient capture that abstains on low quality is the
+wrong shape for an emergency instrument. See `docs/safety.md`.
+
+## Designed, not built
+
+The first clinical protocol pack has been selected and specified but no code
+exists for it: **unilateral facial nerve palsy**, measured through spontaneous
+expression captured ambiently rather than elicited movement. Two headline
+measures—spontaneous excursion asymmetry and an oculo-oral synkinesis index—
+referenced against the resting-symmetry metrics the prototype computes today.
+
+Full design, including the new primitives required, the contract implications,
+and why equivalence to House-Brackmann and Sunnybrook is explicitly not
+claimed: `docs/superpowers/specs/2026-07-24-facial-palsy-protocol-pack-design.md`.
 
 ## Run locally
 
