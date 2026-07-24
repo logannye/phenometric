@@ -78,6 +78,12 @@ export interface FacialKinematicsFrameV1 {
   anatomicalLaterality: "subject-anatomical";
   pose: FacialPose | null;
   eyeAperture: BilateralValue | null;
+  /**
+   * Brow arc height above the inter-eye axis, per side, in inter-eye units.
+   * Frontalis is the zone that separates upper- from lower-motor-neuron
+   * facial weakness, so it is measured separately from the eye.
+   */
+  browHeight: BilateralValue | null;
   mouthCorners: {
     left: NormalizedPoint;
     right: NormalizedPoint;

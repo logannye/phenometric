@@ -21,6 +21,7 @@ export type AmbientMetricGroup =
   | "mouth-geometry"
   | "symmetry"
   | "expression-dynamics"
+  | "brow-geometry"
   | "movement"
   | "blink-behavior";
 
@@ -48,7 +49,12 @@ export type AmbientFaceMetricCode =
   | "ambient.face.spontaneous_event_rate"
   | "ambient.face.spontaneous_excursion.p90"
   | "ambient.face.spontaneous_excursion_asymmetry.median"
-  | "ambient.face.oculo_oral_synkinesis_index";
+  | "ambient.face.oculo_oral_synkinesis_index"
+  | "ambient.face.brow_height.left"
+  | "ambient.face.brow_height.right"
+  | "ambient.face.brow_height_asymmetry.signed"
+  | "ambient.face.lid_closure_completeness.left"
+  | "ambient.face.lid_closure_completeness.right";
 
 export type AmbientMetricCode =
   | AmbientVoiceMetricCode

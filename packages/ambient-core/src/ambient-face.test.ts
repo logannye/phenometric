@@ -63,7 +63,7 @@ function byCode(
 }
 
 describe("extractAmbientFaceMetrics", () => {
-  it("emits the bounded fifteen-metric catalog in stable order", () => {
+  it("emits the bounded twenty-metric catalog in stable order", () => {
     const result = extractAmbientFaceMetrics(ambientFaceFrames(), OPTIONS);
 
     expect(result.outcomes.map((outcome) => outcome.code)).toEqual([
@@ -81,7 +81,12 @@ describe("extractAmbientFaceMetrics", () => {
       "ambient.face.spontaneous_event_rate",
       "ambient.face.spontaneous_excursion.p90",
       "ambient.face.spontaneous_excursion_asymmetry.median",
-      "ambient.face.oculo_oral_synkinesis_index"
+      "ambient.face.oculo_oral_synkinesis_index",
+      "ambient.face.brow_height.left",
+      "ambient.face.brow_height.right",
+      "ambient.face.brow_height_asymmetry.signed",
+      "ambient.face.lid_closure_completeness.left",
+      "ambient.face.lid_closure_completeness.right"
     ]);
     // This fixture holds a static face, so the per-event statistics have
     // nothing to summarize and must abstain rather than report a zero.
@@ -318,6 +323,54 @@ describe("extractAmbientFaceMetrics", () => {
       second.outcomes.map((outcome) => outcome.identity.outcomeId)
     );
     expect(new Set(first.outcomes.map((outcome) => outcome.identity.outcomeId)).size)
-      .toBe(15);
+      .toBe(20);
+  });
+
+  it("grades lid closure per eye against that eye's own open reference", () => {
+    // The fixture blinks to 0.1 from an open reference of 0.3.
+    const left = byCode(
+      ambientFaceFrames(),
+      "ambient.face.lid_closure_completeness.left"
+    );
+    expect(left?.status).toBe("measured");
+    if (left?.status === "measured") {
+      expect(left.value).toBeCloseTo(1 - 0.1 / 0.3, 2);
+    }
+  });
+
+  it("reports incomplete closure on one side without disturbing the other", () => {
+    // Unilateral lagophthalmos: the subject-left lid only reaches 0.24 of its
+    // 0.3 open reference, while the right still closes fully to 0.1.
+    const frames = ambientFaceFrames(60_000, 30, (frame) => {
+      const aperture = frame.eyeAperture!;
+      return aperture.left < 0.2
+        ? { eyeAperture: { left: 0.24, right: aperture.right } }
+        : {};
+    });
+    const left = byCode(frames, "ambient.face.lid_closure_completeness.left");
+    const right = byCode(frames, "ambient.face.lid_closure_completeness.right");
+    expect(left?.status).toBe("measured");
+    expect(right?.status).toBe("measured");
+    if (left?.status === "measured" && right?.status === "measured") {
+      expect(left.value).toBeCloseTo(1 - 0.24 / 0.3, 2);
+      expect(right.value).toBeCloseTo(1 - 0.1 / 0.3, 2);
+      // The affected side closes materially less than the intact side.
+      expect(left.value).toBeLessThan(right.value);
+    }
+  });
+
+  it("signs brow asymmetry toward the side whose brow sits lower", () => {
+    const frames = ambientFaceFrames(60_000, 30, (frame) => ({
+      browHeight: { left: frame.browHeight!.left - 0.06, right: frame.browHeight!.right }
+    }));
+    const asymmetry = byCode(
+      frames,
+      "ambient.face.brow_height_asymmetry.signed"
+    );
+    expect(asymmetry?.status).toBe("measured");
+    if (asymmetry?.status === "measured") {
+      // Subject-left brow is lower, so left minus right is negative.
+      expect(asymmetry.value).toBeCloseTo(-0.06, 3);
+    }
   });
 });

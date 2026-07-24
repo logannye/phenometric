@@ -69,6 +69,7 @@ export function syntheticFacialFrame(
     anatomicalLaterality: "subject-anatomical",
     pose: { yawDegrees: 0, pitchDegrees: 0, rollDegrees: 0 },
     eyeAperture: { left: 0.3, right: 0.3 },
+    browHeight: { left: 0.55, right: 0.55 },
     mouthCorners: {
       left: { x: 0.3, y: 0.1 },
       right: { x: -0.3, y: 0.1 }

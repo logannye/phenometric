@@ -1,6 +1,7 @@
 # Facial Palsy Protocol Pack — Spontaneous Expression Measurement — Design
 
-Status: Approved (design). Implementation not started.
+Status: Approved (design). Implemented 2026-07-24 (PRs #24, #25),
+except where noted in §13.
 Date: 2026-07-24
 Supersedes: nothing. Specifies the "first protocol pack" decision recorded in
 `docs/telehealth-platform-vision.md`.

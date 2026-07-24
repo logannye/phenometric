@@ -32,6 +32,8 @@ export const FACE_LANDMARK_INDICES = {
       [158, 153]
     ]
   },
+  subjectLeftBrow: [300, 293, 334],
+  subjectRightBrow: [70, 63, 105],
   subjectLeftMouthCorner: 291,
   subjectRightMouthCorner: 61,
   upperInnerLip: 13,
@@ -280,6 +282,37 @@ function eyeAperture(
   return gapTotal / 2 / width;
 }
 
+/**
+ * Height of the brow arc above the inter-eye axis, in inter-eye units.
+ *
+ * The coordinate origin sits at the midpoint of the two eye centres with the
+ * x-axis along the inter-eye line, so both eye centres lie at y = 0 by
+ * construction and the brow sits at negative y. Negating gives a positive
+ * height that is already scale-normalised and roll-corrected.
+ *
+ * Averaging three points along the arc rather than taking a single landmark
+ * keeps the value stable against per-frame landmark jitter.
+ */
+function browHeight(
+  landmarks: NormalizedLandmark[],
+  indices: readonly number[],
+  system: FaceCoordinateSystem,
+  frameWidth: number,
+  frameHeight: number
+): number | null {
+  const heights: number[] = [];
+  for (const index of indices) {
+    const point = pointAt(landmarks, index);
+    if (!point) return null;
+    heights.push(
+      -normalizePoint(point, system, frameWidth, frameHeight).y
+    );
+  }
+  if (heights.length === 0) return null;
+  const mean = heights.reduce((total, value) => total + value, 0) / heights.length;
+  return finite(mean) ? mean : null;
+}
+
 function mouthAperture(
   landmarks: NormalizedLandmark[],
   frameWidth: number,
@@ -432,6 +465,7 @@ function baseFrame(
     anatomicalLaterality: "subject-anatomical",
     pose: null,
     eyeAperture: null,
+    browHeight: null,
     mouthCorners: null,
     mouthApertureRatio: null,
     regionalMovementSpeed: null,
@@ -552,6 +586,26 @@ export function deriveFaceFeature(
               input.frameHeight
             )
           }
+        : null,
+    browHeight:
+      system
+        ? (() => {
+            const left = browHeight(
+              landmarks,
+              FACE_LANDMARK_INDICES.subjectLeftBrow,
+              system,
+              input.frameWidth,
+              input.frameHeight
+            );
+            const right = browHeight(
+              landmarks,
+              FACE_LANDMARK_INDICES.subjectRightBrow,
+              system,
+              input.frameWidth,
+              input.frameHeight
+            );
+            return left !== null && right !== null ? { left, right } : null;
+          })()
         : null,
     mouthApertureRatio: mouthAperture(
       landmarks,

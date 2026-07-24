@@ -44,8 +44,14 @@ function neutralLandmarks(): NormalizedLandmark[] {
   values[291] = point(0.57, 0.65);
   values[13] = point(0.5, 0.64);
   values[14] = point(0.5, 0.66);
+  // Brow arcs. Subject-right (33/133 side) and subject-left (362/263 side),
+  // mirrored index pairs 70<->300, 63<->293, 105<->334.
   values[70] = point(0.42, 0.31);
+  values[63] = point(0.40, 0.315);
+  values[105] = point(0.44, 0.305);
   values[300] = point(0.58, 0.31);
+  values[293] = point(0.60, 0.315);
+  values[334] = point(0.56, 0.305);
   return values;
 }
 
@@ -347,6 +353,59 @@ describe("deriveFaceFeature", () => {
 
     expect(serialized).not.toMatch(
       /faceLandmarks|landmarks|blendshapes|transformationMatrix|matrixes/i
+    );
+  });
+
+  it("measures brow height above the inter-eye axis, per side", () => {
+    const result = deriveFaceFeature(
+      nativeResult(neutralLandmarks()),
+      input({ tMs: 0, acquiredAtMs: 1_000, sequence: 1 })
+    );
+    const brow = result.frame.browHeight;
+    expect(brow).not.toBeNull();
+    // The eye centres define y = 0, and the brow sits above them, so height
+    // is positive and the two sides match on a symmetric face.
+    expect(brow!.left).toBeGreaterThan(0);
+    expect(brow!.right).toBeGreaterThan(0);
+    expect(brow!.left).toBeCloseTo(brow!.right, 6);
+  });
+
+  it("reports a lower brow on the side whose frontalis has dropped", () => {
+    const landmarks = neutralLandmarks();
+    // Drop the subject-left brow arc (300/293/334) toward the eye line.
+    for (const index of [300, 293, 334]) {
+      landmarks[index] = {
+        ...landmarks[index],
+        y: landmarks[index].y + 0.04
+      };
+    }
+    const result = deriveFaceFeature(
+      nativeResult(landmarks),
+      input({ tMs: 0, acquiredAtMs: 1_000, sequence: 1 })
+    );
+    const brow = result.frame.browHeight!;
+    expect(brow.left).toBeLessThan(brow.right);
+  });
+
+  it("is scale invariant, because brow height is normalized by inter-eye distance", () => {
+    const base = deriveFaceFeature(
+      nativeResult(neutralLandmarks()),
+      input({ tMs: 0, acquiredAtMs: 1_000, sequence: 1 })
+    );
+    // Same face rendered into a frame of a different pixel size.
+    const scaled = deriveFaceFeature(
+      nativeResult(neutralLandmarks()),
+      input({
+        tMs: 0,
+        acquiredAtMs: 1_000,
+        sequence: 1,
+        frameWidth: 1_280,
+        frameHeight: 720
+      })
+    );
+    expect(scaled.frame.browHeight!.left).toBeCloseTo(
+      base.frame.browHeight!.left,
+      6
     );
   });
 });
