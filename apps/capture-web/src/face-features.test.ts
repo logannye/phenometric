@@ -6,8 +6,12 @@ import type {
 import type { FacialKinematicsFrameV1 } from "@phenometric/ambient-core";
 import { describe, expect, it } from "vitest";
 import {
+  coordinateSystem,
   deriveFaceFeature,
   FACE_LANDMARK_INDICES,
+  irisGeometry,
+  mouthMidlineOffset,
+  palpebralFissure,
   poseFromTransformationMatrix,
   type FaceFeatureInput
 } from "./face-features.js";
@@ -407,5 +411,193 @@ describe("deriveFaceFeature", () => {
       base.frame.browHeight!.left,
       6
     );
+  });
+});
+
+describe("palpebral fissure", () => {
+  const system = () => coordinateSystem(neutralLandmarks(), WIDTH, HEIGHT)!;
+
+  it("measures both dimensions in shared inter-eye units", () => {
+    const marks = neutralLandmarks();
+    const left = palpebralFissure(
+      marks,
+      FACE_LANDMARK_INDICES.subjectLeftEye,
+      system(),
+      WIDTH,
+      HEIGHT
+    );
+    // Canthi span 0.08 of frame width against a 0.16 inter-eye distance.
+    expect(left?.width).toBeCloseTo(0.5, 6);
+    expect(left?.height).toBeCloseTo(21.6 / 204.8, 6);
+  });
+
+  it("measures both eyes against the same facial scale", () => {
+    // The fixture's canthal spans are equal but its lid gaps are not (0.03 vs
+    // 0.02 of frame height, deliberately, so the asymmetry metrics have
+    // something to find). Equal widths confirm the shared normaliser; unequal
+    // heights are the fixture, not the measure.
+    const marks = neutralLandmarks();
+    const left = palpebralFissure(
+      marks, FACE_LANDMARK_INDICES.subjectLeftEye, system(), WIDTH, HEIGHT
+    );
+    const right = palpebralFissure(
+      marks, FACE_LANDMARK_INDICES.subjectRightEye, system(), WIDTH, HEIGHT
+    );
+    expect(left?.width).toBeCloseTo(right!.width, 9);
+    expect(left!.height / right!.height).toBeCloseTo(1.5, 6);
+  });
+
+  it("sees a uniformly narrowed fissure that eye aperture cannot", () => {
+    // Shrink the subject-left eye 20% about its own centre. The lid gap and the
+    // canthal width scale together, so the aperture RATIO is unchanged -- which
+    // is exactly the shape ptosis and orbicularis weakness produce, and exactly
+    // what a self-normalised ratio is blind to.
+    const marks = neutralLandmarks();
+    const centreX = 0.58 * WIDTH;
+    const centreY = 0.4 * HEIGHT;
+    const shrink = (index: number) => {
+      const p = marks[index];
+      marks[index] = {
+        ...p,
+        x: (centreX + 0.8 * (p.x * WIDTH - centreX)) / WIDTH,
+        y: (centreY + 0.8 * (p.y * HEIGHT - centreY)) / HEIGHT
+      };
+    };
+    for (const index of [362, 263, 385, 380, 387, 373]) shrink(index);
+
+    // Compare the same eye before and against after -- the two eyes differ in
+    // the fixture by design, so left-vs-right would not isolate the change.
+    const before = palpebralFissure(
+      neutralLandmarks(),
+      FACE_LANDMARK_INDICES.subjectLeftEye,
+      system(),
+      WIDTH,
+      HEIGHT
+    )!;
+    const after = palpebralFissure(
+      marks, FACE_LANDMARK_INDICES.subjectLeftEye, system(), WIDTH, HEIGHT
+    )!;
+    expect(after.width).toBeCloseTo(before.width * 0.8, 6);
+    expect(after.height).toBeCloseTo(before.height * 0.8, 6);
+
+    // The self-normalised aperture ratio is unmoved by the same change: it
+    // divides the gap by the width, and both shrank together.
+    const apertureBefore = frameFor(neutralLandmarks()).eyeAperture!.left;
+    const apertureAfter = frameFor(marks).eyeAperture!.left;
+    expect(apertureAfter).toBeCloseTo(apertureBefore, 9);
+  });
+
+  it("abstains when a lid point is missing", () => {
+    const marks = neutralLandmarks();
+    marks[385] = { x: Number.NaN, y: 0.5, z: 0, visibility: 1 };
+    expect(
+      palpebralFissure(
+        marks, FACE_LANDMARK_INDICES.subjectLeftEye, system(), WIDTH, HEIGHT
+      )
+    ).toBeNull();
+  });
+});
+
+describe("mouth midline offset", () => {
+  it("is zero when the mouth is centred under the eyes", () => {
+    const marks = neutralLandmarks();
+    const offset = mouthMidlineOffset(
+      marks, coordinateSystem(marks, WIDTH, HEIGHT)!, WIDTH, HEIGHT
+    );
+    expect(offset).toBeCloseTo(0, 9);
+  });
+
+  it("is positive when the mouth sits toward the subject's left", () => {
+    // +x is subject left by the repo's convention, and the subject-left eye is
+    // at the higher image x, so shifting both corners that way is a subject-left
+    // deviation.
+    const marks = neutralLandmarks();
+    marks[61] = { x: 0.46, y: 0.65, z: 0, visibility: 1 };
+    marks[291] = { x: 0.6, y: 0.65, z: 0, visibility: 1 };
+    const offset = mouthMidlineOffset(
+      marks, coordinateSystem(marks, WIDTH, HEIGHT)!, WIDTH, HEIGHT
+    )!;
+    expect(offset).toBeGreaterThan(0);
+    expect(offset).toBeCloseTo((0.03 * WIDTH) / 204.8, 6);
+  });
+
+  it("is unchanged by a corner height difference alone", () => {
+    // Distinct from corner asymmetry: dropping one corner vertically moves the
+    // asymmetry measure but not the lateral position of the mouth centre.
+    const marks = neutralLandmarks();
+    marks[61] = { x: 0.43, y: 0.69, z: 0, visibility: 1 };
+    expect(
+      mouthMidlineOffset(
+        marks, coordinateSystem(marks, WIDTH, HEIGHT)!, WIDTH, HEIGHT
+      )
+    ).toBeCloseTo(0, 9);
+  });
+});
+
+describe("iris geometry", () => {
+  function withIris(): NormalizedLandmark[] {
+    const marks = neutralLandmarks();
+    // Subject-right iris centred in its fissure (canthi 33/133 -> x 0.42).
+    marks[468] = { x: 0.42, y: 0.4, z: 0, visibility: 1 };
+    marks[469] = { x: 0.4, y: 0.4, z: 0, visibility: 1 };
+    marks[470] = { x: 0.42, y: 0.385, z: 0, visibility: 1 };
+    marks[471] = { x: 0.44, y: 0.4, z: 0, visibility: 1 };
+    marks[472] = { x: 0.42, y: 0.415, z: 0, visibility: 1 };
+    // Subject-left iris centred (canthi 362/263 -> x 0.58).
+    marks[473] = { x: 0.58, y: 0.4, z: 0, visibility: 1 };
+    marks[474] = { x: 0.56, y: 0.4, z: 0, visibility: 1 };
+    marks[475] = { x: 0.58, y: 0.385, z: 0, visibility: 1 };
+    marks[476] = { x: 0.6, y: 0.4, z: 0, visibility: 1 };
+    marks[477] = { x: 0.58, y: 0.415, z: 0, visibility: 1 };
+    return marks;
+  }
+
+  it("reports no gaze offset when the iris sits centred in the fissure", () => {
+    const marks = withIris();
+    const iris = irisGeometry(
+      marks,
+      FACE_LANDMARK_INDICES.subjectLeftIris,
+      FACE_LANDMARK_INDICES.subjectLeftEye.canthi,
+      coordinateSystem(marks, WIDTH, HEIGHT)!,
+      WIDTH,
+      HEIGHT
+    );
+    expect(iris?.gazeX).toBeCloseTo(0, 9);
+    expect(iris?.gazeY).toBeCloseTo(0, 9);
+    expect(iris?.diameter).toBeGreaterThan(0);
+  });
+
+  it("signs a gaze shift toward the subject's left as positive", () => {
+    const marks = withIris();
+    for (const index of [473, 474, 475, 476, 477]) {
+      marks[index] = { ...marks[index], x: marks[index].x + 0.01 };
+    }
+    const iris = irisGeometry(
+      marks,
+      FACE_LANDMARK_INDICES.subjectLeftIris,
+      FACE_LANDMARK_INDICES.subjectLeftEye.canthi,
+      coordinateSystem(marks, WIDTH, HEIGHT)!,
+      WIDTH,
+      HEIGHT
+    )!;
+    expect(iris.gazeX).toBeGreaterThan(0);
+    expect(iris.gazeX).toBeCloseTo((0.01 * WIDTH) / 204.8, 6);
+  });
+
+  it("abstains when the model returns only the 468-point base mesh", () => {
+    // A build without the iris head produces no points past 467. Abstaining is
+    // the required behaviour; a zeroed gaze would read as "looking straight
+    // ahead", which is a measurement the session never made.
+    const marks = neutralLandmarks().slice(0, 468);
+    expect(
+      irisGeometry(
+        marks,
+        FACE_LANDMARK_INDICES.subjectLeftIris,
+        FACE_LANDMARK_INDICES.subjectLeftEye.canthi,
+        coordinateSystem(marks, WIDTH, HEIGHT)!,
+        WIDTH,
+        HEIGHT
+      )
+    ).toBeNull();
   });
 });
