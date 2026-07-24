@@ -217,6 +217,8 @@ function analyzeAvailable(block: VoiceWorkletPcmBlock): void {
       f0Hz: analysis.f0Hz,
       f0Confidence: analysis.f0Confidence,
       estimatorAgreement: analysis.estimatorAgreement,
+      spectralFlux: analysis.spectralFlux,
+      cepstralPeakProminenceDb: analysis.cepstralPeakProminenceDb,
       syllabicNucleus,
       clippedSampleFraction: analysis.clippedSampleFraction,
       dcOffset: analysis.dcOffset,

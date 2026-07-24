@@ -41,14 +41,22 @@ The canonical modalities are `voice` and `face`. Audio attribution is
 `speakerAttribution: unverified-local-input`; facial attribution is
 `single-visible-face` and never identity verification.
 
-## Legacy compile compatibility
+## Capture provenance versus v3 runtime schemas
 
-The v2 observation, guided calibration, and v0.2 event interfaces remain
-exported temporarily because legacy ambient-core and trajectory-core modules
-still compile against them. They are not accepted by the v3 runtime schemas
-and must not be used for new report, provenance, or event-journal code. The
-legacy evidence-card, generated-narrative, review-decision, and grounding
-contracts have been removed.
+`observation.ts` and `measurement.ts` hold the live capture-provenance and
+audio-quality types (`AudioPipelineProvenance`, `AudioCaptureSettings`,
+`VideoCaptureSettings`, `VisualPipelineProvenance`, `AudioStreamDiagnostics`,
+`AudioQualityReasonCode`, `BrowserAudioProcessingState`). These describe how a
+session was captured and are consumed by the workers and `primitives.ts`.
+
+They are plain interfaces, not Zod schemas, and are not themselves accepted by
+the v3 runtime schemas. New report, provenance, and event-journal code uses the
+v3 schemas in `observation-v3.ts`.
+
+The guided calibration interfaces remain for compile compatibility. The v2
+observation, measurement, event, and trajectory interfaces were removed on
+2026-07-24, along with the legacy evidence-card, generated-narrative,
+review-decision, and grounding contracts.
 
 Personal Trajectory remains internal and disconnected. Its legacy contract now
 requires an explicit policy and protocol identity and can return

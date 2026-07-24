@@ -1,4 +1,16 @@
+import {
+  applyWindow,
+  cepstralPeakProminence,
+  decimate,
+  hannWindow,
+  powerSpectrum
+} from "./dsp-primitives.js";
 export interface VoiceWindowAnalysis {
+  /**
+   * Cepstral peak prominence in dB, or null when the window holds no measurable
+   * harmonic structure. The best-validated acoustic correlate of dysphonia.
+   */
+  cepstralPeakProminenceDb: number | null;
   rms: number;
   dcOffset: number;
   clippedSampleFraction: number;
@@ -77,31 +89,6 @@ export function calculateRms(samples: Float32Array): number {
   let sum = 0;
   for (const sample of samples) sum += sample * sample;
   return Math.sqrt(sum / samples.length);
-}
-
-function downsample(
-  samples: Float32Array,
-  sourceRate: number,
-  targetRate: number
-): Float32Array {
-  if (sourceRate <= targetRate) return samples;
-  const ratio = sourceRate / targetRate;
-  const result = new Float32Array(
-    Math.max(1, Math.floor(samples.length / ratio))
-  );
-  for (let index = 0; index < result.length; index += 1) {
-    const start = Math.floor(index * ratio);
-    const end = Math.min(
-      samples.length,
-      Math.max(start + 1, Math.floor((index + 1) * ratio))
-    );
-    let sum = 0;
-    for (let source = start; source < end; source += 1) {
-      sum += samples[source];
-    }
-    result[index] = sum / Math.max(1, end - start);
-  }
-  return result;
 }
 
 interface PitchCandidate {
@@ -335,23 +322,37 @@ function resolvePitch(
   };
 }
 
-function bandEnergies(
-  samples: Float32Array,
-  bands = 16
-): number[] {
+/**
+ * Energy in 16 logarithmically spaced bands, for the spectral-flux estimate.
+ *
+ * Previously evaluated a direct DFT at 16 frequencies, calling sin and cos
+ * inside the inner loop -- roughly a million trigonometric evaluations per
+ * second of audio at the current window and hop. One windowed FFT costs less
+ * and resolves the whole spectrum, so the bands are now summed from it.
+ *
+ * The signal is windowed first. The direct evaluation used a rectangular
+ * window, which leaks about -13 dB into neighbouring bands and so blurred the
+ * very band boundaries it was measuring across.
+ */
+function bandEnergies(samples: Float32Array, bands = 16): number[] {
   const result = new Array<number>(bands).fill(0);
+  if (samples.length === 0) return result;
+  const spectrum = powerSpectrum(
+    applyWindow(samples, hannWindow(samples.length))
+  );
+  const usable = spectrum.length - 1;
+  if (usable < bands) return result;
   for (let band = 0; band < bands; band += 1) {
-    const frequency = ((band + 1) / (bands + 1)) * Math.PI;
-    let real = 0;
-    let imaginary = 0;
-    for (let index = 0; index < samples.length; index += 1) {
-      const angle = frequency * index;
-      real += samples[index] * Math.cos(angle);
-      imaginary -= samples[index] * Math.sin(angle);
+    // Logarithmic edges: pitch and the formant structure above it are both
+    // roughly log-spaced, so linear bands spend most of their resolution where
+    // speech has least of its structure.
+    const low = Math.floor(usable ** (band / bands));
+    const high = Math.max(low + 1, Math.floor(usable ** ((band + 1) / bands)));
+    let total = 0;
+    for (let bin = low; bin < high && bin <= usable; bin += 1) {
+      total += spectrum[bin];
     }
-    result[band] =
-      (real * real + imaginary * imaginary) /
-      Math.max(1, samples.length);
+    result[band] = total / Math.max(1, high - low);
   }
   return result;
 }
@@ -373,7 +374,10 @@ export function analyzeVoiceWindow(
     centered[index] = samples[index] - mean;
   }
   const rms = calculateRms(centered);
-  const pitchInput = downsample(centered, sampleRate, 8_000);
+  // Anti-aliased now. The previous boxcar average let content above 4 kHz fold
+  // back into the retained band, where the pitch estimators could not tell it
+  // from signal.
+  const pitchInput = decimate(centered, sampleRate, 8_000);
   const autocorrelation = autocorrelationPitch(pitchInput, 8_000);
   const amdf = amdfPitch(pitchInput, 8_000);
   const zeroCrossing = zeroCrossingPitch(pitchInput, 8_000);
@@ -389,6 +393,9 @@ export function analyzeVoiceWindow(
             return sum + Math.max(0, delta) ** 2;
           }, 0) / currentBands.length
         );
+  // Computed on the full-rate, undecimated signal: the upper harmonics that
+  // set the cepstral background are above the 4 kHz the pitch path keeps.
+  const cepstral = cepstralPeakProminence(centered, sampleRate);
   return {
     rms,
     dcOffset: mean,
@@ -397,6 +404,10 @@ export function analyzeVoiceWindow(
     f0Confidence: pitch.confidence,
     estimatorAgreement: pitch.agreement,
     spectralFlux,
+    // Null on silence and on windows too short to hold a low period. Zero is a
+    // real value here -- it means no harmonic structure -- so it must not stand
+    // in for "not measured".
+    cepstralPeakProminenceDb: cepstral?.prominenceDb ?? null,
     bandEnergies: currentBands
   };
 }

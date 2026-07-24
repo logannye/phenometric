@@ -184,10 +184,9 @@ Python service remain separate CI jobs.
 apps/capture-web/          static ambient browser application
 apps/clinician-review/     documentation-only future surface
 packages/ambient-core/     deterministic face and voice extractors
-packages/contracts/        v3 runtime schemas plus temporary v2 compatibility
+packages/contracts/        v3 runtime schemas plus capture provenance types
 packages/evidence-core/    provenance validation and report builder
 packages/event-log/        session-only workflow journal
-packages/trajectory-core/  disconnected legacy v2 trajectory package
 services/voice-inference/  optional disconnected WavLM research service
 agents/                    exactly three capability boundary documents
 protocols/ and examples/   archival guided/v2 demo artifacts

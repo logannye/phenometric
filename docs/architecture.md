@@ -111,9 +111,15 @@ assets cause the affected lane to fail closed.
 
 ## Retained legacy boundaries
 
-`@phenometric/trajectory-core` and the v2 observation/calibration interfaces
-remain for compile compatibility and research tests. They are disconnected
-from ObservationV3 and the live application.
+The guided calibration interfaces remain for compile compatibility and research
+tests. They are disconnected from ObservationV3 and the live application.
+
+`@phenometric/trajectory-core` and the v2 observation, measurement, and event
+interfaces were removed on 2026-07-24. The package compared one session scalar
+against an unordered bag of priors, was built on superseded v2 contracts, and
+had no importers. The capture-provenance types it shared a file with
+(`AudioPipelineProvenance`, `VideoCaptureSettings`, and siblings) are live and
+were kept.
 
 The Python WavLM sidecar is restored as an optional loopback research service.
 It is disabled by default, separately tested, and has no browser consumer.

@@ -137,4 +137,9 @@ fi
 
 pnpm --filter @phenometric/capture-web verify:assets
 
+# The pack's contentSha256 is hand-edited hex. The runtime check compares the
+# pack against itself, so a stale digest ships to the browser and stamps every
+# observation without anything objecting. Fail the gate instead.
+npx tsx scripts/protocol-digest.mjs --check
+
 echo "PhenoMetric ambient-v3 structure and static assets are valid."

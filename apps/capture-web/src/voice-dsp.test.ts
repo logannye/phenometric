@@ -76,6 +76,7 @@ describe("continuous voice DSP", () => {
     expect(changed.spectralFlux).toBeGreaterThanOrEqual(0);
     expect(Object.keys(changed).sort()).toEqual([
       "bandEnergies",
+      "cepstralPeakProminenceDb",
       "clippedSampleFraction",
       "dcOffset",
       "estimatorAgreement",
@@ -96,5 +97,41 @@ describe("continuous voice DSP", () => {
     expect(ring.latest(6)).toBeNull();
     ring.clear();
     expect(ring.availableSamples()).toBe(0);
+  });
+});
+
+describe("voice window analysis carries the new spectral measures", () => {
+  function voiced(f0: number, rate = 48_000, length = 1_920): Float32Array {
+    const samples = new Float32Array(length);
+    const harmonics = Math.floor(rate / 2 / f0) - 1;
+    for (let index = 0; index < length; index += 1) {
+      let value = 0;
+      for (let h = 1; h <= harmonics; h += 1) {
+        value += Math.sin((2 * Math.PI * h * f0 * index) / rate) / h;
+      }
+      samples[index] = value * 0.2;
+    }
+    return samples;
+  }
+
+  it("measures cepstral prominence on a voiced window", () => {
+    const analysis = analyzeVoiceWindow(voiced(140), 48_000);
+    expect(analysis.cepstralPeakProminenceDb).not.toBeNull();
+    expect(Number.isFinite(analysis.cepstralPeakProminenceDb!)).toBe(true);
+  });
+
+  it("abstains on silence rather than reporting a prominence of zero", () => {
+    const analysis = analyzeVoiceWindow(new Float32Array(1_920), 48_000);
+    expect(analysis.cepstralPeakProminenceDb).toBeNull();
+  });
+
+  it("still resolves pitch through the anti-aliased decimation path", () => {
+    // The decimation change is the one most likely to disturb existing
+    // behaviour, since every pitch estimate runs through it.
+    for (const f0 of [110, 180, 240]) {
+      const analysis = analyzeVoiceWindow(voiced(f0), 48_000);
+      expect(analysis.f0Hz).toBeGreaterThan(f0 * 0.9);
+      expect(analysis.f0Hz).toBeLessThan(f0 * 1.1);
+    }
   });
 });

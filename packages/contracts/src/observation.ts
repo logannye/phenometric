@@ -1,18 +1,4 @@
-import type { CaptureMode } from "./capture-mode.js";
-import type {
-  Abstention,
-  BrowserAudioProcessingState,
-  ConfoundEnvelope,
-  Measurement,
-  MeasurementContextKind,
-  MeasurementUncertainty,
-  MeasurableWindow
-} from "./measurement.js";
-
-export interface CaptureAdapter {
-  id: string;
-  version: string;
-}
+import type { BrowserAudioProcessingState } from "./measurement.js";
 
 export interface VisualPipelineProvenance {
   processorRef: string;
@@ -56,6 +42,12 @@ export interface AudioCaptureSettings {
   };
 }
 
+/**
+ * The window/hop/ring literals describe the pitch and VAD analysis path and are
+ * pinned so a mid-stream change cannot go unnoticed. A future analysis path with
+ * different framing (formants, cepstrum) declares its own provenance rather than
+ * widening these.
+ */
 export interface AudioPipelineProvenance {
   processorRef: string;
   runtime: "audio-worklet-voice-worker";
@@ -68,22 +60,6 @@ export interface AudioPipelineProvenance {
   algorithmVersion: string;
 }
 
-/**
- * @deprecated Legacy v2 conductor compatibility only. The ambient prototype
- * has no external speech-representation runtime and ObservationV3 does not
- * expose this shape.
- */
-export interface VoiceModelProvenance {
-  processorType: "legacy-speech-representation";
-  processorRef: string;
-  modelId: string;
-  revision: string;
-  weightSha256: string;
-  requestedLayers: readonly number[];
-  runtime: string;
-  device: string;
-}
-
 export interface AudioStreamDiagnostics {
   receivedBlockCount: number;
   processedFrameCount: number;
@@ -93,75 +69,4 @@ export interface AudioStreamDiagnostics {
   p95FeatureLatencyMs: number;
   timestampRegressionCount: number;
   ringBufferCapacitySamples: number;
-}
-
-export interface EncounterQualitySummary {
-  speechWindowCount: number;
-  faceWindowCount: number;
-  abstentionCount: number;
-  qualityTransitionCount: number;
-  audioFrameCount: number;
-  speechActiveFrameCount: number;
-  pitchedFrameCount: number;
-  pitchCoverage: number;
-  audioLostBlockFraction: number;
-  maximumAudioBlockGapMs: number;
-  medianAudioSnrDb: number;
-  faceFrameCount: number;
-  usableFaceFrameCount: number;
-  usableFaceFraction: number;
-  faceWithholdingDurationMs: number;
-  faceRecoveryObserved: boolean;
-  postRecoveryFaceWindowCount: number;
-}
-
-export interface BiomarkerAggregate {
-  code: string;
-  label: string;
-  unit: string;
-  contextKind: MeasurementContextKind;
-  value: number;
-  spread: number;
-  confidence: number;
-  windowCount: number;
-  algorithmVersion: string;
-  processorRef: string;
-  sourceWindowRefs: string[];
-  confounds: ConfoundEnvelope;
-  uncertainty: MeasurementUncertainty;
-  clinicalValidation: "none";
-}
-
-export type FoundationProtocolId =
-  | "facial-foundation.v1"
-  | "voice-foundation.v1"
-  | "unified-foundation.v1";
-
-export interface EncounterObservation {
-  schemaVersion: "phenometric.encounter-observation.v2";
-  containsPHI: false;
-  rawMediaRetained: false;
-  rawAudioRetained: false;
-  nativeAudioObservationsRetained: false;
-  transcriptRetained: false;
-  voiceEmbeddingsRetained: false;
-  nativeVisualObservationsRetained: false;
-  selectedProtocolId: FoundationProtocolId;
-  captureMode: CaptureMode;
-  visitId: string;
-  participantId: string;
-  occurredAt: string;
-  captureAdapter: CaptureAdapter;
-  audioPipeline: AudioPipelineProvenance | null;
-  audioCaptureSettings: AudioCaptureSettings | null;
-  voiceModel: VoiceModelProvenance | null;
-  audioStreamDiagnostics: AudioStreamDiagnostics | null;
-  visualPipeline: VisualPipelineProvenance | null;
-  videoCaptureSettings: VideoCaptureSettings | null;
-  windows: MeasurableWindow[];
-  measurements: Measurement[];
-  aggregates: BiomarkerAggregate[];
-  abstentions: Abstention[];
-  measurementCount: number;
-  qualitySummary: EncounterQualitySummary;
 }

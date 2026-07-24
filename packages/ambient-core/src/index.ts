@@ -98,8 +98,6 @@ export {
   DEFAULT_CAPTURE_QUALITY_POLICY,
   evaluateVisualQuality
 } from "./visual-quality.js";
-export { createEventFactory } from "./events.js";
-export type { EventFactory } from "./events.js";
 
 export {
   EXPRESSION_MIN_EVENTS,
@@ -114,3 +112,12 @@ export {
   type ExpressionEvent,
   type ExpressionSummary
 } from "./expression-events.js";
+export type {
+  BlinkEventRecord,
+  ExpressionEventRecord,
+  PauseEventRecord,
+  PauseKind,
+  SessionEventRecords,
+  SpeechRunEventRecord,
+  SubjectSide
+} from "./kinematic-events.js";

@@ -287,7 +287,23 @@ async function initialize(
       minFaceDetectionConfidence: 0.5,
       minFacePresenceConfidence: 0.5,
       minTrackingConfidence: 0.5,
-      outputFaceBlendshapes: true,
+      /*
+       * Off deliberately, and this is a measurement decision rather than a
+       * performance one.
+       *
+       * The 52 coefficients are the obvious shortcut to "Action Unit
+       * intensities", and they are the wrong instrument twice over. The rig is
+       * trained for avatar retargeting, which carries a symmetry prior --
+       * it suppresses exactly the left-right difference this system exists to
+       * measure. And a 52-dimensional expression vector is identity-adjacent
+       * in a way per-side geometry is not, which is why the frame privacy
+       * assertion names `blendshapes` outright.
+       *
+       * Action Units are derived geometrically from landmarks instead. This
+       * also stops paying for coefficients that were computed every frame and
+       * discarded at the worker boundary.
+       */
+      outputFaceBlendshapes: false,
       outputFacialTransformationMatrixes: true
     } as const;
     try {

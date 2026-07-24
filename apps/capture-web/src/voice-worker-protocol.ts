@@ -13,10 +13,22 @@ export const VOICE_SIGNAL_FRAME_VERSION =
   "phenometric.voice-signal-frame.v1" as const;
 export const VOICE_WORKLET_MESSAGE_VERSION =
   "phenometric.voice-worklet-message.v1" as const;
+/*
+ * 1.1: the pitch path decimates through an anti-aliased filter instead of a
+ * boxcar average, band energies come from one windowed FFT instead of a
+ * rectangular-window direct evaluation, and cepstral peak prominence is
+ * measured. Pitch values shift slightly as a result, so sessions analysed
+ * under 1.0 and 1.1 are not interchangeable.
+ *
+ * The frame schema version stays v1: the new fields are optional additions, so
+ * the shape is still compatible. What changed is the values, and that is what
+ * the algorithm and processor versions exist to say. They are separate for
+ * exactly this reason.
+ */
 export const VOICE_DSP_ALGORITHM_VERSION =
-  "voice-analysis-1.0" as const;
+  "voice-analysis-1.1" as const;
 export const VOICE_DSP_PROCESSOR_REF =
-  "browser-voice-dsp@1.0" as const;
+  "browser-voice-dsp@1.1" as const;
 export type VoiceWorkerRequest =
   | {
       schemaVersion: typeof VOICE_WORKER_MESSAGE_VERSION;
