@@ -41,6 +41,22 @@ export const SYNKINESIS_MIN_ELEVATION = 0.02;
 /** Fewer events than this and the session cannot support event statistics. */
 export const EXPRESSION_MIN_EVENTS = 3;
 
+/**
+ * Longest inter-frame gap an expression may span.
+ *
+ * Callers pass the concatenated frames of the accepted bins, and a rejected bin
+ * leaves a hole in that sequence. Without this check an event opening before
+ * the hole closes after it, fabricating one movement out of two unrelated
+ * moments. The duration filter only catches holes wider than
+ * {@link EXPRESSION_MAX_DURATION_MS}; a single rejected 5 s bin sits inside the
+ * accepted window and passes.
+ *
+ * Matches the 200 ms gap the bin screener already tolerates within a bin, so
+ * anything larger is by definition a discontinuity the screener rejected.
+ * {@link detectBlinks} guards its own state machine the same way.
+ */
+export const EXPRESSION_MAX_FRAME_GAP_MS = 200;
+
 export interface ExpressionPoint {
   x: number;
   y: number;
@@ -203,7 +219,15 @@ export function detectExpressionEvents(
     open = [];
   };
 
+  let previous: AmbientFacialFrame | null = null;
   for (const frame of eligible) {
+    // A hole in the sequence -- a bin the screener rejected -- ends whatever
+    // was open. Discarding rather than closing is deliberate: the movement's
+    // real extent is unobserved, so its duration and peak are unknown.
+    if (previous && frame.tMs - previous.tMs > EXPRESSION_MAX_FRAME_GAP_MS) {
+      open = [];
+    }
+    previous = frame;
     const value = drive(frame, baseline);
     if (open.length === 0) {
       if (value >= EXPRESSION_ONSET_ELEVATION) open.push(frame);

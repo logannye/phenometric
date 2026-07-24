@@ -223,3 +223,46 @@ describe("session summary", () => {
     expect(summary.synkinesisEventCount).toBe(0);
   });
 });
+
+describe("rejected-bin holes", () => {
+  /**
+   * Frames either side of a hole, each side individually too brief to be an
+   * expression, but jointly inside the 300 ms - 10 s window. Without a gap
+   * check the detector stitches them into one event that never happened.
+   */
+  function acrossHole(holeMs: number): AmbientFacialFrame[] {
+    const frames: AmbientFacialFrame[] = [];
+    for (let tMs = 0; tMs < 6_000; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0, liftRight: 0 }));
+    }
+    // 200 ms raised, then the hole, then 200 ms raised again.
+    for (let tMs = 6_000; tMs < 6_200; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0.12, liftRight: 0.12 }));
+    }
+    const resume = 6_200 + holeMs;
+    for (let tMs = resume; tMs < resume + 200; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0.12, liftRight: 0.12 }));
+    }
+    for (let tMs = resume + 200; tMs < resume + 2_200; tMs += 40) {
+      frames.push(frameAt(tMs, { liftLeft: 0, liftRight: 0 }));
+    }
+    return frames;
+  }
+
+  it("does not stitch an event across a rejected bin", () => {
+    // One rejected 5 s bin. Both raised stretches are 200 ms -- under the
+    // 300 ms floor -- so neither is an event on its own, and the span across
+    // the hole sits inside the 10 s ceiling that would otherwise catch it.
+    const frames = acrossHole(5_000);
+    const baseline = restingBaseline(frames)!;
+    expect(detectExpressionEvents(frames, baseline)).toHaveLength(0);
+  });
+
+  it("still detects a contiguous expression of the same total length", () => {
+    // Same geometry, no hole: the two stretches are now one 400 ms movement,
+    // which is a real event. Guards against the fix suppressing everything.
+    const frames = acrossHole(40);
+    const baseline = restingBaseline(frames)!;
+    expect(detectExpressionEvents(frames, baseline)).toHaveLength(1);
+  });
+});
