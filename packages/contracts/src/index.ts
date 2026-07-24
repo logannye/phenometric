@@ -22,48 +22,16 @@ export type {
   CompletionGatedVoicePolicy
 } from "./calibration.js";
 export type {
-  Modality,
-  MeasurementContextKind,
   AudioQualityReasonCode,
-  BrowserAudioProcessingState,
-  SpeechConfoundEnvelope,
-  VisualConfoundEnvelope,
-  ConfoundEnvelope,
-  MeasurementContext,
-  MeasurableWindow,
-  MeasurementUncertainty,
-  Measurement,
-  Abstention
+  BrowserAudioProcessingState
 } from "./measurement.js";
 export type {
-  BiomarkerAggregate,
-  CaptureAdapter,
   AudioCaptureSettings,
   AudioPipelineProvenance,
-  VoiceModelProvenance,
   AudioStreamDiagnostics,
   VisualPipelineProvenance,
-  VideoCaptureSettings,
-  EncounterQualitySummary,
-  EncounterObservation
+  VideoCaptureSettings
 } from "./observation.js";
-export type {
-  AmbientActorId,
-  AmbientActor,
-  AmbientEventType,
-  WorkflowStage,
-  EventEnvelope
-} from "./event.js";
-export type {
-  ReviewStatus,
-  TrajectoryHistoryRecord,
-  TrajectoryPolicy,
-  TrajectoryCompatibilityReasonCode,
-  CompatibilityDecision,
-  TrajectoryDirection,
-  BiomarkerComparison,
-  TrajectoryComparison
-} from "./trajectory.js";
 export {
   AmbientMeasurementContextSchema,
   AmbientModalitySchema,
