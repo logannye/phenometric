@@ -20,6 +20,7 @@ export type AmbientMetricGroup =
   | "eye-geometry"
   | "mouth-geometry"
   | "symmetry"
+  | "expression-dynamics"
   | "movement"
   | "blink-behavior";
 
@@ -41,7 +42,13 @@ export type AmbientFaceMetricCode =
   | "ambient.face.mouth_aperture.p90"
   | "ambient.face.mouth_corner_position.asymmetry"
   | "ambient.face.landmark_speed.p90"
-  | "ambient.face.blink_rate.bilateral";
+  | "ambient.face.blink_rate.bilateral"
+  | "ambient.face.rest_mouth_corner_asymmetry.signed"
+  | "ambient.face.rest_eye_aperture_asymmetry.signed"
+  | "ambient.face.spontaneous_event_rate"
+  | "ambient.face.spontaneous_excursion.p90"
+  | "ambient.face.spontaneous_excursion_asymmetry.median"
+  | "ambient.face.oculo_oral_synkinesis_index";
 
 export type AmbientMetricCode =
   | AmbientVoiceMetricCode
@@ -135,6 +142,10 @@ export interface AmbientMetricEvidence {
   nucleusCount?: number;
   frontalExposureMs?: number;
   blinkCount?: number;
+  /** Spontaneous expression events detected in the session. */
+  expressionEventCount?: number;
+  /** Events where both sides moved enough to measure oculo-oral coupling. */
+  coupledExpressionEventCount?: number;
   processorRefs: readonly string[];
   trackSegmentIds: readonly string[];
   sourceWindowRefs: readonly string[];

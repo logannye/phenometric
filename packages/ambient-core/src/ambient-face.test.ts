@@ -63,7 +63,7 @@ function byCode(
 }
 
 describe("extractAmbientFaceMetrics", () => {
-  it("emits the bounded nine-metric catalog in stable order", () => {
+  it("emits the bounded fifteen-metric catalog in stable order", () => {
     const result = extractAmbientFaceMetrics(ambientFaceFrames(), OPTIONS);
 
     expect(result.outcomes.map((outcome) => outcome.code)).toEqual([
@@ -75,10 +75,38 @@ describe("extractAmbientFaceMetrics", () => {
       "ambient.face.mouth_aperture.p90",
       "ambient.face.mouth_corner_position.asymmetry",
       "ambient.face.landmark_speed.p90",
-      "ambient.face.blink_rate.bilateral"
+      "ambient.face.blink_rate.bilateral",
+      "ambient.face.rest_mouth_corner_asymmetry.signed",
+      "ambient.face.rest_eye_aperture_asymmetry.signed",
+      "ambient.face.spontaneous_event_rate",
+      "ambient.face.spontaneous_excursion.p90",
+      "ambient.face.spontaneous_excursion_asymmetry.median",
+      "ambient.face.oculo_oral_synkinesis_index"
     ]);
-    expect(result.outcomes.every((outcome) => outcome.status === "measured"))
-      .toBe(true);
+    // This fixture holds a static face, so the per-event statistics have
+    // nothing to summarize and must abstain rather than report a zero.
+    const eventStatistics = new Set([
+      "ambient.face.spontaneous_excursion.p90",
+      "ambient.face.spontaneous_excursion_asymmetry.median",
+      "ambient.face.oculo_oral_synkinesis_index"
+    ]);
+    for (const outcome of result.outcomes) {
+      if (eventStatistics.has(outcome.code)) {
+        expect(outcome.status).toBe("withheld");
+        if (outcome.status === "withheld") {
+          expect(outcome.reasonCode).toBe("insufficient-events");
+        }
+      } else {
+        expect(outcome.status).toBe("measured");
+      }
+    }
+    // A rate of zero IS a measurement: the session was observed and contained
+    // no spontaneous expressions.
+    const rate = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.spontaneous_event_rate"
+    );
+    expect(rate?.status).toBe("measured");
+    if (rate?.status === "measured") expect(rate.value).toBe(0);
     expect(result.outcomes[0].identity.context).toBe("ambient-frontal");
   });
 
@@ -290,6 +318,6 @@ describe("extractAmbientFaceMetrics", () => {
       second.outcomes.map((outcome) => outcome.identity.outcomeId)
     );
     expect(new Set(first.outcomes.map((outcome) => outcome.identity.outcomeId)).size)
-      .toBe(9);
+      .toBe(15);
   });
 });

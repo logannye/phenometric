@@ -5,6 +5,12 @@ import {
 } from "./stats.js";
 import { evaluateVisualQuality } from "./visual-quality.js";
 import {
+  EXPRESSION_MIN_EVENTS as AMBIENT_EXPRESSION_MIN_EVENTS,
+  excursionAsymmetry,
+  summarizeExpressions,
+  synkinesisIndex
+} from "./expression-events.js";
+import {
   measuredOutcome,
   sortedUnique,
   withheldOutcome
@@ -50,7 +56,13 @@ const FACE_CODES: readonly AmbientFaceMetricCode[] = [
   "ambient.face.mouth_aperture.p90",
   "ambient.face.mouth_corner_position.asymmetry",
   "ambient.face.landmark_speed.p90",
-  "ambient.face.blink_rate.bilateral"
+  "ambient.face.blink_rate.bilateral",
+  "ambient.face.rest_mouth_corner_asymmetry.signed",
+  "ambient.face.rest_eye_aperture_asymmetry.signed",
+  "ambient.face.spontaneous_event_rate",
+  "ambient.face.spontaneous_excursion.p90",
+  "ambient.face.spontaneous_excursion_asymmetry.median",
+  "ambient.face.oculo_oral_synkinesis_index"
 ];
 
 interface TimedValue {
@@ -771,6 +783,120 @@ export function extractAmbientFaceMetrics(
       )
     );
   }
+
+  // Resting geometry and spontaneous expression dynamics. These read the
+  // frames inside qualifying bins, so they inherit the same pose, scale,
+  // cadence, and attribution gates as every other face metric.
+  const expressionFrames = screening.bins.flatMap((bin) => bin.frames);
+  const expressionSummary =
+    expressionFrames.length > 0
+      ? summarizeExpressions(
+          expressionFrames,
+          screening.bins.reduce((total, bin) => total + bin.durationMs, 0)
+        )
+      : null;
+
+  const expressionEvidence = evidenceFor(inRange, screening.bins, {
+    expressionEventCount: expressionSummary?.eventCount,
+    coupledExpressionEventCount: expressionSummary?.synkinesisEventCount
+  });
+
+  const emitExpression = (
+    code: AmbientFaceMetricCode,
+    value: number | null | undefined,
+    dispersionValues: number[] | null,
+    shortfall: { reasonCode: AmbientWithheldReasonCode; detail: string } | null
+  ): void => {
+    const blocked = failure ?? shortfall;
+    if (blocked || value === null || value === undefined || !finite(value)) {
+      outcomes.push(
+        withheldOutcome(
+          code,
+          options,
+          expressionEvidence,
+          blocked?.reasonCode ?? "no-usable-signal",
+          blocked?.detail ??
+            "No resting face geometry was available in the eligible bins."
+        )
+      );
+      return;
+    }
+    outcomes.push(
+      measuredOutcome(
+        code,
+        options,
+        expressionEvidence,
+        value,
+        qualityScore,
+        dispersionValues && dispersionValues.length > 0
+          ? dispersion(dispersionValues)
+          : null
+      )
+    );
+  };
+
+  const eventCount = expressionSummary?.eventCount ?? 0;
+  const tooFewEvents =
+    eventCount < AMBIENT_EXPRESSION_MIN_EVENTS
+      ? {
+          reasonCode: "insufficient-events" as AmbientWithheldReasonCode,
+          detail:
+            "Spontaneous expression statistics require at least three detected expression events."
+        }
+      : null;
+  const tooFewCoupled =
+    (expressionSummary?.synkinesisEventCount ?? 0) <
+    AMBIENT_EXPRESSION_MIN_EVENTS
+      ? {
+          reasonCode: "insufficient-events" as AmbientWithheldReasonCode,
+          detail:
+            "Oculo-oral coupling requires at least three events where both sides cleared the movement floor."
+        }
+      : null;
+
+  emitExpression(
+    "ambient.face.rest_mouth_corner_asymmetry.signed",
+    expressionSummary?.restMouthCornerAsymmetry,
+    null,
+    null
+  );
+  emitExpression(
+    "ambient.face.rest_eye_aperture_asymmetry.signed",
+    expressionSummary?.restEyeApertureAsymmetry,
+    null,
+    null
+  );
+  // A rate of zero is a measurement, not an absence: the session was observed
+  // and contained no expressions. Only the per-event statistics below need
+  // events to exist before they mean anything.
+  emitExpression(
+    "ambient.face.spontaneous_event_rate",
+    expressionSummary?.eventRatePerMinute,
+    null,
+    null
+  );
+  emitExpression(
+    "ambient.face.spontaneous_excursion.p90",
+    expressionSummary?.excursionP90,
+    null,
+    tooFewEvents
+  );
+  emitExpression(
+    "ambient.face.spontaneous_excursion_asymmetry.median",
+    expressionSummary?.excursionAsymmetryMedian,
+    (expressionSummary?.events ?? [])
+      .map(excursionAsymmetry)
+      .filter((value): value is number => value !== null),
+    tooFewEvents
+  );
+  emitExpression(
+    "ambient.face.oculo_oral_synkinesis_index",
+    expressionSummary?.synkinesisIndexMedian,
+    (expressionSummary?.events ?? [])
+      .map(synkinesisIndex)
+      .filter((value): value is number => value !== null),
+    tooFewEvents ?? tooFewCoupled
+  );
 
   return {
     outcomes: FACE_CODES.map((code) => {

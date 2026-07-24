@@ -5,6 +5,8 @@ import {
   type AmbientMetricDefinition
 } from "./ambient-types.js";
 
+const AMBIENT_EXPRESSION_MIN_EVENTS = 3;
+
 export const AMBIENT_VOICE_ALGORITHM_VERSION =
   "1.0.0";
 export const AMBIENT_FACE_ALGORITHM_VERSION =
@@ -280,6 +282,61 @@ function faceDefinitions(): AmbientMetricDefinition[] {
         minimumClosureMs: 50,
         maximumRecoveryMs: 800,
         refractoryMs: 150
+      }
+    },
+    {
+      ...shared,
+      code: "ambient.face.rest_mouth_corner_asymmetry.signed",
+      label: "Signed resting mouth-corner asymmetry",
+      unit: "inter-eye-normalized-distance",
+      group: "symmetry"
+    },
+    {
+      ...shared,
+      code: "ambient.face.rest_eye_aperture_asymmetry.signed",
+      label: "Signed resting eye-aperture asymmetry",
+      unit: "eye-width-ratio",
+      group: "symmetry"
+    },
+    {
+      ...shared,
+      code: "ambient.face.spontaneous_event_rate",
+      label: "Spontaneous expression rate",
+      unit: "events/minute",
+      group: "expression-dynamics"
+    },
+    {
+      ...shared,
+      code: "ambient.face.spontaneous_excursion.p90",
+      label: "P90 spontaneous expression excursion",
+      unit: "inter-eye-normalized-distance",
+      group: "expression-dynamics",
+      minimumEvidence: {
+        ...shared.minimumEvidence,
+        expressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS
+      }
+    },
+    {
+      ...shared,
+      code: "ambient.face.spontaneous_excursion_asymmetry.median",
+      label: "Median spontaneous excursion asymmetry",
+      unit: "signed-excursion-ratio",
+      group: "expression-dynamics",
+      minimumEvidence: {
+        ...shared.minimumEvidence,
+        expressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS
+      }
+    },
+    {
+      ...shared,
+      code: "ambient.face.oculo_oral_synkinesis_index",
+      label: "Oculo-oral coupling difference",
+      unit: "signed-coupling-ratio",
+      group: "expression-dynamics",
+      minimumEvidence: {
+        ...shared.minimumEvidence,
+        expressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS,
+        coupledExpressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS
       }
     }
   ];

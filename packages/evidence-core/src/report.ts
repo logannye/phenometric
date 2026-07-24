@@ -36,6 +36,7 @@ const SECTION_LABELS: Readonly<Record<ReportSectionId, string>> = {
   "eye-geometry": "Eye geometry",
   "mouth-geometry": "Mouth geometry",
   symmetry: "Symmetry",
+  "expression-dynamics": "Expression dynamics",
   movement: "Movement",
   "blink-behavior": "Blink behavior"
 };
@@ -95,7 +96,10 @@ const ALGORITHM_PARAMETER_REQUIREMENTS = new Set([
   "minimumClosureMs",
   "recoveryFractionOfOpenReference",
   "maximumRecoveryMs",
-  "refractoryMs"
+  "refractoryMs",
+  // The movement floor below which oculo-oral coupling is not divided; an
+  // algorithm parameter, not a property of the session's evidence.
+  "minimumCouplingElevation"
 ]);
 
 function evidenceFactFor(
@@ -140,6 +144,10 @@ function evidenceFactFor(
     case "minimumEventsForMedian":
     case "minimumNuclei":
       return outcome.evidence.eventCount;
+    case "minimumExpressionEvents":
+      return qualityNumber("expressionEventCount");
+    case "minimumCoupledExpressionEvents":
+      return qualityNumber("coupledExpressionEventCount");
     case "minimumDataPerBinMs":
       return qualityNumber("minimumDataPerBinMs");
     case "minimumSamplesPerBin":

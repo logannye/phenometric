@@ -235,8 +235,48 @@ describe("speech-timing evidence is gated on timing coverage, not voicing", () =
   });
 });
 
+describe("expression evidence requirements resolve to emitted facts", () => {
+  // Every published evidence requirement needs a fact behind it. When one has
+  // none, `evidenceFactFor` returns undefined and the gate is silently
+  // skipped — the same defect that let minimumTimingCoverage compare a timing
+  // threshold against pitch coverage. Assert the facts exist at the source.
+  it("emits the quality facts the expression requirements resolve from", () => {
+    const observation = buildAmbientObservation({
+      sessionId: "session-adapter",
+      subjectRef: "subject-session-adapter",
+      consent: consent(),
+      startedAt: "2026-07-20T17:00:00.000Z",
+      endedAt: "2026-07-20T17:00:30.000Z",
+      durationMs: 30_000,
+      voiceFrames: [],
+      faceFrames: faceFrames(),
+      noiseCalibrationDurationMs: 0,
+      faceCalibration: {
+        durationMs: 1_500,
+        baselineBoxWidthPixels: 384,
+        baselineBoxHeightPixels: 360
+      },
+      voiceLaneAvailable: false,
+      faceLaneAvailable: true,
+      processors: []
+    });
+    const rate = observation.metricOutcomes.find(
+      (candidate) =>
+        candidate.metricCode === "ambient.face.spontaneous_event_rate"
+    );
+    expect(rate?.evidence.qualityFacts.expressionEventCount).toBeDefined();
+    expect(
+      rate?.evidence.qualityFacts.coupledExpressionEventCount
+    ).toBeDefined();
+    // Provenance must still validate with the new requirements live.
+    expect(
+      validateObservationProvenance(observation, AMBIENT_LOCAL_PROTOCOL_PACK)
+    ).toEqual({ status: "pass", errors: [] });
+  });
+});
+
 describe("ambient observation adapter", () => {
-  it("projects empty capture into 16 traceable withheld outcomes", () => {
+  it("projects empty capture into 22 traceable withheld outcomes", () => {
     const observation = buildAmbientObservation({
       sessionId: "session-adapter",
       subjectRef: "subject-session-adapter",
@@ -252,7 +292,7 @@ describe("ambient observation adapter", () => {
       faceLaneAvailable: false,
       processors: []
     });
-    expect(observation.metricOutcomes).toHaveLength(16);
+    expect(observation.metricOutcomes).toHaveLength(22);
     expect(observation.metricOutcomes.every((outcome) => outcome.status === "withheld")).toBe(true);
     expect(
       validateObservationProvenance(
@@ -266,7 +306,7 @@ describe("ambient observation adapter", () => {
       AMBIENT_LOCAL_PROTOCOL_PACK,
       { generatedAt: "2026-07-20T17:00:01.000Z" }
     );
-    expect(report.sections.flatMap((section) => section.outcomes)).toHaveLength(16);
+    expect(report.sections.flatMap((section) => section.outcomes)).toHaveLength(22);
     expect(report.exportAvailable).toBe(false);
   });
 

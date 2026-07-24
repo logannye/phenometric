@@ -35,10 +35,13 @@ const FACE_WITHHELD_REASONS = [
 const rawProtocolPack = {
   schemaVersion: "phenometric.protocol-pack.v1",
   packId: "ambient-local-observation",
-  version: "1.0.0",
+  // 2.0.0: the metric set changed (6 face metrics added, new report section).
+  // Sessions measured under different packs are not comparable, and the
+  // content digest below makes that structurally visible rather than implicit.
+  version: "2.0.0",
   // SHA-256 of the canonical pack content with this field omitted.
   contentSha256:
-    "c4a74628d0c969672a8c9e897deef550b828143f27386dad2f8162fba78182ab",
+    "001199820d8520ca3728fed614f5f4d96649dc5a717e41d703484883535ebf4e",
   status: "nonclinical-prototype",
   maximumSessionDurationMs: 300_000,
   supportedTarget: {
@@ -110,6 +113,7 @@ const rawProtocolPack = {
     "eye-geometry",
     "mouth-geometry",
     "symmetry",
+    "expression-dynamics",
     "movement",
     "blink-behavior"
   ],
@@ -373,6 +377,136 @@ const rawProtocolPack = {
         "insufficient-exposure",
         "insufficient-frame-cadence"
       ],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    // Signed resting geometry. The existing *.asymmetry metrics report
+    // magnitude only, which cannot distinguish a corner that has drooped from
+    // one that has over-corrected into contracture. Sign carries that.
+    {
+      code: "ambient.face.rest_mouth_corner_asymmetry.signed",
+      label: "Signed resting mouth-corner asymmetry",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "inter-eye-normalized-distance",
+      reportSection: "symmetry",
+      reportOrder: 2,
+      algorithmId: "ambient-rest-mouth-corner-signed",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "poseCoverage"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    {
+      code: "ambient.face.rest_eye_aperture_asymmetry.signed",
+      label: "Signed resting eye-aperture asymmetry",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "eye-width-ratio",
+      reportSection: "symmetry",
+      reportOrder: 3,
+      algorithmId: "ambient-rest-eye-aperture-signed",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "poseCoverage"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    // Spontaneous expression dynamics. Detected in ordinary conversation and
+    // never prompted: volitional and spontaneous facial movement travel
+    // different neural pathways, and asking for a smile makes it volitional.
+    {
+      code: "ambient.face.spontaneous_event_rate",
+      label: "Spontaneous expression rate",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "events/minute",
+      reportSection: "expression-dynamics",
+      reportOrder: 0,
+      algorithmId: "ambient-spontaneous-expression",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "expressionEventCount"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    {
+      code: "ambient.face.spontaneous_excursion.p90",
+      label: "P90 spontaneous expression excursion",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "inter-eye-normalized-distance",
+      reportSection: "expression-dynamics",
+      reportOrder: 1,
+      algorithmId: "ambient-spontaneous-expression",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000,
+        minimumExpressionEvents: 3
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "expressionEventCount"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS, "insufficient-events"],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    {
+      code: "ambient.face.spontaneous_excursion_asymmetry.median",
+      label: "Median spontaneous excursion asymmetry",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "signed-excursion-ratio",
+      reportSection: "expression-dynamics",
+      reportOrder: 2,
+      algorithmId: "ambient-spontaneous-expression",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000,
+        minimumExpressionEvents: 3
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "expressionEventCount"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS, "insufficient-events"],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    },
+    {
+      code: "ambient.face.oculo_oral_synkinesis_index",
+      label: "Oculo-oral coupling difference",
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "signed-coupling-ratio",
+      reportSection: "expression-dynamics",
+      reportOrder: 3,
+      algorithmId: "ambient-oculo-oral-coupling",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000,
+        minimumExpressionEvents: 3,
+        minimumCoupledExpressionEvents: 3,
+        minimumCouplingElevation: 0.02
+      },
+      qualityInputs: [
+        "usableBins",
+        "usableDurationMs",
+        "expressionEventCount",
+        "coupledExpressionEventCount"
+      ],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS, "insufficient-events"],
       technicalVerification: "automated-test",
       clinicalValidation: "none"
     }

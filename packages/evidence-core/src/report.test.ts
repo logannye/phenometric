@@ -318,10 +318,10 @@ describe("post-encounter report", () => {
     );
     const outcomes = report.sections.flatMap((section) => section.outcomes);
 
-    expect(report.sections).toHaveLength(8);
-    expect(outcomes).toHaveLength(16);
+    expect(report.sections).toHaveLength(9);
+    expect(outcomes).toHaveLength(22);
     expect(new Set(outcomes.map((outcome) => outcome.metricCode)).size).toBe(
-      16
+      22
     );
     expect(outcomes.every((outcome) => outcome.status === "withheld")).toBe(
       true

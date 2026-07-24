@@ -84,7 +84,7 @@ export const PostEncounterReportV1Schema = z
     protocolRef: ProtocolRefSchema,
     generatedAt: z.string().datetime({ offset: true }),
     source: SourceAttributionV1Schema,
-    sections: z.array(ReportSectionV1Schema).length(8),
+    sections: z.array(ReportSectionV1Schema).length(9),
     boundaryStatement: z.literal(REPORT_BOUNDARY_STATEMENT),
     sourceDisclosure: z.literal(REPORT_SOURCE_DISCLOSURE),
     persistence: z.literal("session-memory-only"),
