@@ -500,6 +500,37 @@ Selection should be based on clinical partner access, reference-standard
 quality, patient need, data feasibility, regulatory path, and ability to run a
 prospective multisite study—not market size alone.
 
+**Selected (2026-07-24): unilateral facial nerve palsy.** Design recorded in
+`docs/superpowers/specs/2026-07-24-facial-palsy-protocol-pack-design.md`.
+Not implemented.
+
+Two properties drove the choice. The face metrics are a within-frame left/right
+contrast, so the cross-visit confounds that make voice comparison fragile—
+different microphone, room, interlocutor, and topic—apply to both hemifaces and
+cancel in the difference. And the effect sizes are gross geometry: complete
+flaccid palsy displaces the oral commissure on the order of 5–10 mm and widens
+the resting palpebral fissure by roughly 1–3 mm.
+
+The pack measures **spontaneous** expression rather than elicited movement.
+Spontaneous and volitional facial movement travel different neural pathways,
+and spontaneity cannot be elicited—asking a patient to smile makes the movement
+volitional by definition. Ambient capture is therefore not a cheaper
+approximation of a task-based measurement for this construct; it is the only
+valid method. The accepted cost is that this does not reproduce
+House-Brackmann or Sunnybrook, which are dominated by voluntary excursion, and
+equivalence to them is explicitly not claimed.
+
+Ordering note: myasthenia gravis remains second on the list but is **not
+reachable under the current architecture**. Fatigability is the defining sign,
+and a session-level aggregate averages a within-session decay to nothing.
+Reaching it requires within-session time series, not a new protocol pack.
+
+Two boundaries recorded with the selection. Synkinesis detection is in scope
+from the start: aberrant regeneration reduces asymmetry magnitude, so a system
+reporting unsigned asymmetry alone would read the onset of a complication as
+recovery. And acute stroke screening is refused as a written product boundary—
+see `docs/safety.md`.
+
 ### Clinical integration
 
 1. Add clinician correction and adjudication.

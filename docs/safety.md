@@ -62,6 +62,28 @@ by default, loopback-only, accepts no file path or URL, does not log request
 bodies, and retains neither PCM nor returned summaries. The browser does not
 call it, and its output is not an active metric or evidence artifact.
 
+## Refused capability: acute stroke screening
+
+Acute stroke screening must not be built on this system, and this is recorded
+as a standing boundary rather than left as an absence—facial droop is one of
+three FAST items, so the idea is structurally recurrent and will be proposed
+again.
+
+Two reasons, either sufficient:
+
+1. The discriminator between central and peripheral facial weakness is
+   forehead sparing. No brow or frontalis measurement exists, so the
+   distinction cannot be made at all. Even once those landmarks exist,
+   sensitivity adequate for an acute triage decision is a far higher bar than
+   the trend measurement this system is designed for.
+2. Capture is ambient, unsupervised, and deliberately quality-gated to abstain.
+   Those are the opposite of the properties an acute screening instrument
+   requires, and abstention in an emergency context is itself a hazard.
+
+A missed stroke is catastrophic and indefensible. No configuration, protocol
+pack, or downstream consumer may present a facial asymmetry measurement as
+stroke triage information.
+
 ## Deferred governance
 
 Authentication, authorization, PHI handling, durable audit logs, retention
