@@ -234,7 +234,32 @@ Practical consequences: name blink fields `lidAperture*`, not `eyeAperture*`.
 Name iris fields `gazeVector` / `pupilDiameter` / `irisCentre`, never
 `irisLandmarks`.
 
-### Tremor band feasibility — resolve during Layer 1
+### Tremor band feasibility — OUTCOME: not shipped in this pass
+
+Resolved by not shipping it. The arithmetic below stands, the measurement that
+would settle it does not exist yet, and the frame rate was deliberately left at
+`{ ideal: 30 }` (`main.ts:391`).
+
+Raising the request to 60 fps doubles decode and inference load. Whether that
+raises or *lowers* the analyzed cadence — the quantity tremor actually depends
+on — is a property of the target device, and changing the request without
+measuring would be the same unvalidated assertion this section warns about.
+
+What did change: `cadenceHz` and `p95FrameGapMs` are now written onto the
+evidence of every face metric (0f), so the distribution of real delivered
+cadence becomes visible from ordinary sessions. That is the measurement. Once
+enough real sessions exist to characterise it, this decision can be made on
+data:
+
+- delivered cadence comfortably above 24 Hz → the 5–8 Hz band is reachable,
+  8–12 Hz still needs 60 fps
+- delivered cadence near the 16 Hz floor → tremor is out of reach on this
+  capture path regardless of band, and the honest answer is to say so
+
+Until then no tremor band is emitted, which is the correct behaviour: an
+aliased number in the 8–12 Hz band would be indistinguishable from a real one.
+
+### Original analysis
 
 `AMBIENT_FACE_MIN_SAMPLES_PER_BIN = 80` over a 5000 ms bin = **16 Hz minimum
 accepted cadence → 8 Hz Nyquist**. The planned 8–12 Hz band is unmeasurable at
