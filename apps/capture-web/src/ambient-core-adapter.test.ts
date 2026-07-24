@@ -106,6 +106,7 @@ function faceFrames(durationMs = 30_000, cadenceHz = 30): AmbientFacialFrame[] {
         anatomicalLaterality: "subject-anatomical",
         pose: { yawDegrees: 0, pitchDegrees: 0, rollDegrees: 0 },
         eyeAperture: { left: 0.3, right: 0.3 },
+        browHeight: { left: 0.55, right: 0.55 },
         mouthCorners: {
           left: { x: 0.3, y: 0.1 },
           right: { x: -0.3, y: 0.1 }
@@ -276,7 +277,7 @@ describe("expression evidence requirements resolve to emitted facts", () => {
 });
 
 describe("ambient observation adapter", () => {
-  it("projects empty capture into 22 traceable withheld outcomes", () => {
+  it("projects empty capture into 27 traceable withheld outcomes", () => {
     const observation = buildAmbientObservation({
       sessionId: "session-adapter",
       subjectRef: "subject-session-adapter",
@@ -292,7 +293,7 @@ describe("ambient observation adapter", () => {
       faceLaneAvailable: false,
       processors: []
     });
-    expect(observation.metricOutcomes).toHaveLength(22);
+    expect(observation.metricOutcomes).toHaveLength(27);
     expect(observation.metricOutcomes.every((outcome) => outcome.status === "withheld")).toBe(true);
     expect(
       validateObservationProvenance(
@@ -306,7 +307,7 @@ describe("ambient observation adapter", () => {
       AMBIENT_LOCAL_PROTOCOL_PACK,
       { generatedAt: "2026-07-20T17:00:01.000Z" }
     );
-    expect(report.sections.flatMap((section) => section.outcomes)).toHaveLength(22);
+    expect(report.sections.flatMap((section) => section.outcomes)).toHaveLength(27);
     expect(report.exportAvailable).toBe(false);
   });
 

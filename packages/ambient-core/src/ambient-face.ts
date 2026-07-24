@@ -62,7 +62,12 @@ const FACE_CODES: readonly AmbientFaceMetricCode[] = [
   "ambient.face.spontaneous_event_rate",
   "ambient.face.spontaneous_excursion.p90",
   "ambient.face.spontaneous_excursion_asymmetry.median",
-  "ambient.face.oculo_oral_synkinesis_index"
+  "ambient.face.oculo_oral_synkinesis_index",
+  "ambient.face.brow_height.left",
+  "ambient.face.brow_height.right",
+  "ambient.face.brow_height_asymmetry.signed",
+  "ambient.face.lid_closure_completeness.left",
+  "ambient.face.lid_closure_completeness.right"
 ];
 
 interface TimedValue {
@@ -74,6 +79,11 @@ interface FacialBinValues {
   eyeLeft: number;
   eyeRight: number;
   eyeAsymmetry: number;
+  /** Most-closed state reached in this bin, per eye. */
+  eyeClosedLeft: number;
+  eyeClosedRight: number;
+  browLeft: number | null;
+  browRight: number | null;
   mouthWidth: number;
   mouthApertureMedian: number;
   mouthApertureP90: number;
@@ -254,6 +264,8 @@ function binValues(
   const eyeAsymmetry = makeTimed(frames, (frame) =>
     Math.abs(frame.eyeAperture!.left - frame.eyeAperture!.right)
   );
+  const browLeft = makeTimed(frames, (frame) => frame.browHeight?.left ?? null);
+  const browRight = makeTimed(frames, (frame) => frame.browHeight?.right ?? null);
   const widths = makeTimed(frames, mouthWidth);
   const apertures = makeTimed(frames, (frame) => frame.mouthApertureRatio);
   const cornerAsymmetry = makeTimed(frames, mouthCornerAsymmetry);
@@ -275,6 +287,15 @@ function binValues(
     eyeLeft: timedPercentile(eyeLeft, 0.9, stepMs),
     eyeRight: timedPercentile(eyeRight, 0.9, stepMs),
     eyeAsymmetry: timedPercentile(eyeAsymmetry, 0.5, stepMs),
+    // The most-closed state the eye actually reaches in this bin. A low
+    // percentile will not do: at normal blink rates only a few percent of a
+    // bin's frames are mid-blink, so even P05 sits above the closed state and
+    // would report an eye that never closes. Robustness comes from taking the
+    // median of these per-bin minima across bins, not from smoothing here.
+    eyeClosedLeft: Math.min(...eyeLeft.map((sample) => sample.value)),
+    eyeClosedRight: Math.min(...eyeRight.map((sample) => sample.value)),
+    browLeft: browLeft.length > 0 ? timedPercentile(browLeft, 0.5, stepMs) : null,
+    browRight: browRight.length > 0 ? timedPercentile(browRight, 0.5, stepMs) : null,
     mouthWidth: timedPercentile(widths, 0.5, stepMs),
     mouthApertureMedian: timedPercentile(apertures, 0.5, stepMs),
     mouthApertureP90: timedPercentile(apertures, 0.9, stepMs),
@@ -897,6 +918,109 @@ export function extractAmbientFaceMetrics(
       .filter((value): value is number => value !== null),
     tooFewEvents ?? tooFewCoupled
   );
+
+  // Brow geometry and per-eye closure. Both read the same qualifying bins as
+  // every other face metric, so they inherit the identical pose, scale,
+  // cadence, and attribution gates.
+  const binStat = (
+    select: (values: FacialBinValues) => number | null,
+    probability = 0.5
+  ): number | null => {
+    const values = screening.bins
+      .map((bin) => select(bin.values))
+      .filter((value): value is number => value !== null && finite(value));
+    if (values.length === 0) return null;
+    return probability === 0.5
+      ? median(values)
+      : percentile(values, probability);
+  };
+  const binMedian = (select: (values: FacialBinValues) => number | null) =>
+    binStat(select);
+
+  const browLeft = binMedian((values) => values.browLeft);
+  const browRight = binMedian((values) => values.browRight);
+  // Completeness of 1 means the lid reaches full closure; 0 means it never
+  // moves off its open reference. Referenced to the eye's OWN open state, so
+  // it is a within-eye ratio and does not depend on face scale.
+  const closure = (
+    open: number | null,
+    closed: number | null
+  ): number | null => {
+    if (open === null || closed === null || !finite(open) || !finite(closed)) {
+      return null;
+    }
+    if (open <= 0) return null;
+    return Math.max(0, Math.min(1, 1 - closed / open));
+  };
+  // Closure is an intermittent event, so the closed reference is a LOW
+  // percentile of the per-bin minima rather than their median. A bin that
+  // happens to contain no blink reports its open value as the minimum, and a
+  // median over a mix of blink and no-blink bins lands between the two —
+  // reporting an eye that half-closes when it in fact closes fully. P25 is
+  // low enough to sit in a blink-bearing bin at any normal blink rate while
+  // still discarding a single mistracked bin.
+  const closureLeft = closure(
+    binMedian((values) => values.eyeLeft),
+    binStat((values) => values.eyeClosedLeft, 0.25)
+  );
+  const closureRight = closure(
+    binMedian((values) => values.eyeRight),
+    binStat((values) => values.eyeClosedRight, 0.25)
+  );
+
+  const zoneEvidence = evidenceFor(inRange, screening.bins);
+  const emitZone = (
+    code: AmbientFaceMetricCode,
+    value: number | null,
+    dispersionValues: number[]
+  ): void => {
+    if (failure || value === null || !finite(value)) {
+      outcomes.push(
+        withheldOutcome(
+          code,
+          options,
+          zoneEvidence,
+          failure?.reasonCode ?? "no-usable-signal",
+          failure?.detail ??
+            "The eligible bins did not carry the geometry this metric requires."
+        )
+      );
+      return;
+    }
+    outcomes.push(
+      measuredOutcome(
+        code,
+        options,
+        zoneEvidence,
+        value,
+        qualityScore,
+        dispersionValues.length > 0 ? dispersion(dispersionValues) : null
+      )
+    );
+  };
+
+  const perBin = (select: (values: FacialBinValues) => number | null) =>
+    screening.bins
+      .map((bin) => select(bin.values))
+      .filter((value): value is number => value !== null && finite(value));
+
+  emitZone(
+    "ambient.face.brow_height.left",
+    browLeft,
+    perBin((values) => values.browLeft)
+  );
+  emitZone(
+    "ambient.face.brow_height.right",
+    browRight,
+    perBin((values) => values.browRight)
+  );
+  emitZone(
+    "ambient.face.brow_height_asymmetry.signed",
+    browLeft !== null && browRight !== null ? browLeft - browRight : null,
+    []
+  );
+  emitZone("ambient.face.lid_closure_completeness.left", closureLeft, []);
+  emitZone("ambient.face.lid_closure_completeness.right", closureRight, []);
 
   return {
     outcomes: FACE_CODES.map((code) => {

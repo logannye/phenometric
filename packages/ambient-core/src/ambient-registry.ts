@@ -338,6 +338,41 @@ function faceDefinitions(): AmbientMetricDefinition[] {
         expressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS,
         coupledExpressionEventCount: AMBIENT_EXPRESSION_MIN_EVENTS
       }
+    },
+    {
+      ...shared,
+      code: "ambient.face.brow_height.left",
+      label: "Left brow height",
+      unit: "inter-eye-normalized-distance",
+      group: "brow-geometry"
+    },
+    {
+      ...shared,
+      code: "ambient.face.brow_height.right",
+      label: "Right brow height",
+      unit: "inter-eye-normalized-distance",
+      group: "brow-geometry"
+    },
+    {
+      ...shared,
+      code: "ambient.face.brow_height_asymmetry.signed",
+      label: "Signed brow-height asymmetry",
+      unit: "inter-eye-normalized-distance",
+      group: "brow-geometry"
+    },
+    {
+      ...shared,
+      code: "ambient.face.lid_closure_completeness.left",
+      label: "Left lid closure completeness",
+      unit: "closure-ratio",
+      group: "blink-behavior"
+    },
+    {
+      ...shared,
+      code: "ambient.face.lid_closure_completeness.right",
+      label: "Right lid closure completeness",
+      unit: "closure-ratio",
+      group: "blink-behavior"
     }
   ];
 }

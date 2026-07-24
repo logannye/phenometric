@@ -37,6 +37,7 @@ function face(
       rollDegrees: 1
     },
     eyeAperture: { left: 0.28, right: 0.27 },
+    browHeight: { left: 0.55, right: 0.55 },
     mouthCorners: {
       left: { x: 0.4, y: 0.8 },
       right: { x: -0.4, y: 0.8 }

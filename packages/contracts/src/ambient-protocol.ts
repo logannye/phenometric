@@ -35,13 +35,13 @@ const FACE_WITHHELD_REASONS = [
 const rawProtocolPack = {
   schemaVersion: "phenometric.protocol-pack.v1",
   packId: "ambient-local-observation",
-  // 2.0.0: the metric set changed (6 face metrics added, new report section).
+  // 3.0.0: brow geometry and per-eye closure added (5 face metrics).
   // Sessions measured under different packs are not comparable, and the
   // content digest below makes that structurally visible rather than implicit.
-  version: "2.0.0",
+  version: "3.0.0",
   // SHA-256 of the canonical pack content with this field omitted.
   contentSha256:
-    "001199820d8520ca3728fed614f5f4d96649dc5a717e41d703484883535ebf4e",
+    "434fc4093e9be5968c6b9a99e5d11a8830b8e852b3ee8d9d5ba6948051ef07d3",
   status: "nonclinical-prototype",
   maximumSessionDurationMs: 300_000,
   supportedTarget: {
@@ -114,6 +114,7 @@ const rawProtocolPack = {
     "mouth-geometry",
     "symmetry",
     "expression-dynamics",
+    "brow-geometry",
     "movement",
     "blink-behavior"
   ],
@@ -509,7 +510,57 @@ const rawProtocolPack = {
       withheldReasonCodes: [...FACE_WITHHELD_REASONS, "insufficient-events"],
       technicalVerification: "automated-test",
       clinicalValidation: "none"
-    }
+    },
+    // Frontalis. Forehead sparing is what separates upper- from
+    // lower-motor-neuron facial weakness, so the brow is graded as its own
+    // zone rather than folded into eye geometry.
+    ...[
+      ["ambient.face.brow_height.left", "Left brow height", 0],
+      ["ambient.face.brow_height.right", "Right brow height", 1],
+      ["ambient.face.brow_height_asymmetry.signed", "Signed brow-height asymmetry", 2]
+    ].map(([code, label, reportOrder]) => ({
+      code,
+      label,
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "inter-eye-normalized-distance",
+      reportSection: "brow-geometry",
+      reportOrder,
+      algorithmId: "ambient-brow-geometry",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "poseCoverage"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    })),
+    // Unilateral lagophthalmos is the corneal risk, and a bilateral blink
+    // detector renders it as a global rate collapse. Closure is graded per eye.
+    ...[
+      ["ambient.face.lid_closure_completeness.left", "Left lid closure completeness", 1],
+      ["ambient.face.lid_closure_completeness.right", "Right lid closure completeness", 2]
+    ].map(([code, label, reportOrder]) => ({
+      code,
+      label,
+      modality: "face",
+      context: "ambient-frontal",
+      unit: "closure-ratio",
+      reportSection: "blink-behavior",
+      reportOrder,
+      algorithmId: "ambient-lid-closure-completeness",
+      algorithmVersion: "1.0.0",
+      evidenceRequirements: {
+        minimumBins: 3,
+        minimumObservationSpanMs: 30_000
+      },
+      qualityInputs: ["usableBins", "usableDurationMs", "poseCoverage"],
+      withheldReasonCodes: [...FACE_WITHHELD_REASONS],
+      technicalVerification: "automated-test",
+      clinicalValidation: "none"
+    }))
   ]
 } as const;
 

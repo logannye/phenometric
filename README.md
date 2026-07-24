@@ -122,8 +122,8 @@ disabled-by-default research surface. The browser does not import or call it.
 - authentication, PHI workflows, EHR/FHIR integration, or export;
 - diagnosis, progression classification, risk prediction, or treatment advice;
 - analytical or clinical validation against a reference standard;
-- clinical protocol packs, including the designed-but-unbuilt facial palsy pack
-  (see below).
+- clinical validation of any protocol pack, including facial palsy;
+- voluntary-movement grading (House-Brackmann / Sunnybrook equivalence).
 
 ## Refused capability
 
@@ -132,13 +132,15 @@ sparing—the discriminator between central and peripheral facial weakness—is 
 measurable here, and an ambient capture that abstains on low quality is the
 wrong shape for an emergency instrument. See `docs/safety.md`.
 
-## Designed, not built
+## First protocol pack
 
-The first clinical protocol pack has been selected and specified but no code
-exists for it: **unilateral facial nerve palsy**, measured through spontaneous
-expression captured ambiently rather than elicited movement. Two headline
-measures—spontaneous excursion asymmetry and an oculo-oral synkinesis index—
-referenced against the resting-symmetry metrics the prototype computes today.
+The first clinical protocol pack is **unilateral facial nerve palsy**, measured
+through spontaneous expression captured ambiently rather than elicited
+movement. The measurement layer is implemented: eleven face metrics covering
+signed resting geometry, spontaneous excursion asymmetry, an oculo-oral
+synkinesis index, brow/frontalis geometry, and per-eye lid closure. No metric
+is clinically validated, and the detection thresholds are engineering defaults
+chosen from the geometry rather than calibrated against recordings.
 
 Full design, including the new primitives required, the contract implications,
 and why equivalence to House-Brackmann and Sunnybrook is explicitly not

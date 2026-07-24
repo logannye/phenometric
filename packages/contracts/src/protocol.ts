@@ -26,6 +26,7 @@ export const ReportSectionIdSchema = z.enum([
   "mouth-geometry",
   "symmetry",
   "expression-dynamics",
+  "brow-geometry",
   "movement",
   "blink-behavior"
 ]);
@@ -53,7 +54,12 @@ export const MetricCodeSchema = z.enum([
   "ambient.face.spontaneous_event_rate",
   "ambient.face.spontaneous_excursion.p90",
   "ambient.face.spontaneous_excursion_asymmetry.median",
-  "ambient.face.oculo_oral_synkinesis_index"
+  "ambient.face.oculo_oral_synkinesis_index",
+  "ambient.face.brow_height.left",
+  "ambient.face.brow_height.right",
+  "ambient.face.brow_height_asymmetry.signed",
+  "ambient.face.lid_closure_completeness.left",
+  "ambient.face.lid_closure_completeness.right"
 ]);
 export type MetricCode = z.infer<typeof MetricCodeSchema>;
 
@@ -189,10 +195,11 @@ export const ProtocolPackV1Schema = z
       z.literal("mouth-geometry"),
       z.literal("symmetry"),
       z.literal("expression-dynamics"),
+      z.literal("brow-geometry"),
       z.literal("movement"),
       z.literal("blink-behavior")
     ]),
-    metrics: z.array(MetricDefinitionSchema).length(22)
+    metrics: z.array(MetricDefinitionSchema).length(27)
   })
   .strict()
   .superRefine((pack, context) => {

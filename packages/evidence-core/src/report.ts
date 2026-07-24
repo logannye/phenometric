@@ -37,6 +37,7 @@ const SECTION_LABELS: Readonly<Record<ReportSectionId, string>> = {
   "mouth-geometry": "Mouth geometry",
   symmetry: "Symmetry",
   "expression-dynamics": "Expression dynamics",
+  "brow-geometry": "Brow geometry",
   movement: "Movement",
   "blink-behavior": "Blink behavior"
 };

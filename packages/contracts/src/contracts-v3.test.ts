@@ -15,14 +15,14 @@ describe("protocol pack v1", () => {
   it("is a complete immutable source of truth", () => {
     expect(
       ProtocolPackV1Schema.parse(AMBIENT_LOCAL_PROTOCOL_PACK).metrics
-    ).toHaveLength(22);
+    ).toHaveLength(27);
     expect(Object.isFrozen(AMBIENT_LOCAL_PROTOCOL_PACK)).toBe(true);
     expect(Object.isFrozen(AMBIENT_LOCAL_PROTOCOL_PACK.metrics)).toBe(true);
     expect(
       new Set(
         AMBIENT_LOCAL_PROTOCOL_PACK.metrics.map((metric) => metric.code)
       ).size
-    ).toBe(22);
+    ).toBe(27);
   });
 
   it("binds the protocol and consent text to their SHA-256 digests", async () => {
