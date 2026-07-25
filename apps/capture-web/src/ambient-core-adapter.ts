@@ -195,14 +195,15 @@ function reportCaptureDiagnostics(
   if (curve.length > 0) {
     lines.push(
       "if the all-or-nothing frame gate became fractional:",
-      "  threshold   bins   lost to gap   lost to sample count"
+      "  threshold   bins   lost to gap   lost to span   lost to samples"
     );
     for (const point of curve) {
       lines.push(
         `  ${point.threshold.toFixed(2).padStart(8)}` +
           `${String(point.binsAccepted).padStart(7)}` +
           `${String(point.lostToGap).padStart(14)}` +
-          `${String(point.lostToSampleCount).padStart(23)}`
+          `${String(point.lostToSpan ?? 0).padStart(15)}` +
+          `${String(point.lostToSampleCount).padStart(17)}`
       );
     }
   }
@@ -214,7 +215,8 @@ function reportCaptureDiagnostics(
         `  bin ${String(bin.index).padStart(3)}  ` +
           `${(bin.usableFraction * 100).toFixed(1).padStart(5)}%  ` +
           `${String(bin.usableFrameCount).padStart(4)}/${String(bin.frameCount).padEnd(4)}  ` +
-          `gap ${bin.maxUsableGapMs.toFixed(0).padStart(5)} ms`
+          `gap ${bin.maxUsableGapMs.toFixed(0).padStart(5)} ms  ` +
+          `span ${(bin.usableSpanMs ?? 0).toFixed(0).padStart(5)} ms`
       );
     }
   }

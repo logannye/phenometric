@@ -549,3 +549,66 @@ describe("tier-2 events survive a session no bin qualifies", () => {
     ).toBe(true);
   });
 });
+
+describe("bins survive brief pose excursions", () => {
+  /**
+   * A session where the head leaves the pose limits for a burst in each bin.
+   * `badFramesPerBin` out of 150 are pushed past the yaw limit, contiguously,
+   * so the excursion looks like a real glance away rather than noise.
+   */
+  function withExcursions(badFramesPerBin: number): AmbientFacialFrame[] {
+    // Scattered rather than contiguous, and never at a bin edge. A contiguous
+    // edge loss shortens the usable SPAN one-for-one, and the span rule allows
+    // only 200 ms of slack against the data rule's 1000 ms -- so an edge burst
+    // is rejected by span no matter how much data survives. Mid-bin bursts are
+    // rejected by the gap rule for the same reason. Only scattered loss is
+    // recoverable, which is exactly what this change buys and no more.
+    const stride = Math.max(2, Math.floor(148 / badFramesPerBin));
+    return ambientFaceFrames(70_000, 30, (frame, index) => {
+      const positionInBin = index % 150;
+      const dropped =
+        positionInBin > 0 &&
+        positionInBin < 149 &&
+        positionInBin % stride === 0;
+      return dropped
+        ? { pose: { yawDegrees: 18, pitchDegrees: 2, rollDegrees: 1 } }
+        : {};
+    });
+  }
+
+  it("accepts a bin that keeps enough analyzed data", () => {
+    // 15 of 150 frames lost: 135 remain, about 4.5 s of the 5 s bin, clearing
+    // minimumDataPerBinMs. The all-or-nothing rule discarded this entirely.
+    const result = extractAmbientFaceMetrics(withExcursions(15), OPTIONS);
+    const measured = result.outcomes.filter(
+      (outcome) => outcome.status === "measured"
+    );
+    expect(measured.length).toBeGreaterThan(0);
+  });
+
+  it("still rejects a bin that lost too much of its data", () => {
+    // Every other frame lost: about 2.5 s of a 5 s bin, well under the 4 s the
+    // pack requires. The threshold is the published requirement, not a new
+    // constant.
+    const result = extractAmbientFaceMetrics(withExcursions(74), OPTIONS);
+    const eyeLeft = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.eye_aperture.left"
+    );
+    expect(eyeLeft?.status).toBe("withheld");
+  });
+
+  it("measures only from frames that individually passed the pose gate", () => {
+    // The retained frames are all pose-valid, so geometry stays sound; the bin
+    // simply rests on less of it. A bin's sample count must reflect what was
+    // actually used, not what arrived.
+    const result = extractAmbientFaceMetrics(withExcursions(15), OPTIONS);
+    const eyeLeft = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.eye_aperture.left"
+    );
+    expect(eyeLeft?.status).toBe("measured");
+    expect(eyeLeft?.evidence.samplesPerBin).toBeLessThan(150);
+    expect(eyeLeft?.evidence.samplesPerBin).toBeGreaterThanOrEqual(
+      80
+    );
+  });
+});

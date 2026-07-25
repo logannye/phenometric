@@ -158,6 +158,8 @@ export interface FaceScreeningDiagnostics {
     usableFrameCount: number;
     usableFraction: number;
     maxUsableGapMs: number;
+    /** Wall-clock extent of the usable frames; the span rule tests this. */
+    usableSpanMs: number;
   }>;
   /**
    * Bins that WOULD qualify at each candidate frame-usability threshold, if the
@@ -172,6 +174,7 @@ export interface FaceScreeningDiagnostics {
     binsAccepted: number;
     lostToGap: number;
     lostToSampleCount: number;
+    lostToSpan: number;
   }>;
 }
 
@@ -443,7 +446,7 @@ function binValues(
 
 function qualifyBin(
   index: number,
-  frames: AmbientFacialFrame[],
+  candidateFrames: readonly AmbientFacialFrame[],
   options: AmbientFaceExtractionOptions,
   onReject?: (reason: string) => void
 ): FacialBin | null {
@@ -451,14 +454,29 @@ function qualifyBin(
     onReject?.(reason);
     return null;
   };
+  /*
+   * Unusable frames are dropped; the bin is not.
+   *
+   * This used to require EVERY frame to pass, which in real capture discarded
+   * 82% of a session's bins to exclude 22% of its frames -- one glance away
+   * costing the surrounding five seconds. Measured across three real sessions,
+   * it was the single reason nothing was ever measurable.
+   *
+   * No new threshold replaces it, because the pack already carries one:
+   * `minimumDataPerBinMs` of 4000 in a 5000 ms bin IS an 80% requirement. The
+   * all-or-nothing rule was redundant with it and far stricter. Dropping bad
+   * frames and letting the published requirement do its job makes the code
+   * enforce what the pack always said.
+   *
+   * Every retained frame is individually pose-valid, so the geometry stays
+   * sound -- the bin simply rests on less of it, which is exactly what
+   * `minimumDataPerBinMs` and `minimumSamplesPerBin` exist to bound.
+   */
+  const frames = candidateFrames.filter((frame) =>
+    ambientFrameUsable(frame, options)
+  );
   if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
-    return reject("too-few-frames");
-  }
-  if (!frames.every((frame) => ambientFrameUsable(frame, options))) {
-    // All-or-nothing by design: one unusable frame discards the whole bin. In
-    // real capture this is the gate most likely to dominate, which is exactly
-    // why it now says so.
-    return reject("frame-gate");
+    return reject("too-few-usable-frames");
   }
   const processorRefs = new Set(frames.map((frame) => frame.processorRef));
   const trackSegmentIds = new Set(frames.map(faceTrackSegmentId));
@@ -482,11 +500,19 @@ function qualifyBin(
   }
   const actualSpanMs = frames.at(-1)!.tMs - frames[0].tMs;
   const stepMs = nominalStepMs(frames);
+  /*
+   * How much of this bin was actually ANALYZED, not how much time elapsed
+   * across it.
+   *
+   * Summing raw inter-frame gaps counted a hole as data: two frames 200 ms
+   * apart contributed 200 ms while carrying two samples. That was harmless
+   * while the frame gate guaranteed no holes and wrong the moment it stopped.
+   * Each retained frame now represents one nominal step of observation, which
+   * is what `minimumDataPerBinMs` is checked against.
+   */
   const durationMs = Math.min(
     AMBIENT_FACE_BIN_MS,
-    Math.round(
-      (gaps.reduce((total, gap) => total + gap, 0) + stepMs) * 1_000
-    ) / 1_000
+    Math.round(frames.length * stepMs * 1_000) / 1_000
   );
   if (
     actualSpanMs < AMBIENT_FACE_MIN_BIN_SPAN_MS ||
@@ -586,7 +612,9 @@ function screenBins(
       usableFrameCount: usable.length,
       usableFraction:
         bucket.length > 0 ? usable.length / bucket.length : 0,
-      maxUsableGapMs
+      maxUsableGapMs,
+      usableSpanMs:
+        usable.length > 1 ? usable.at(-1)!.tMs - usable[0].tMs : 0
     };
   });
 
@@ -594,6 +622,7 @@ function screenBins(
     let binsAccepted = 0;
     let lostToGap = 0;
     let lostToSampleCount = 0;
+    let lostToSpan = 0;
     for (const bin of binStats) {
       if (bin.usableFraction < threshold) continue;
       if (bin.usableFrameCount < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
@@ -604,9 +633,16 @@ function screenBins(
         lostToGap += 1;
         continue;
       }
+      // Omitting this made an earlier projection optimistic: losing frames from
+      // a bin EDGE shortens the usable span one-for-one, and the span rule is
+      // far tighter than the data rule -- 200 ms of slack against 1000 ms.
+      if (bin.usableSpanMs < AMBIENT_FACE_MIN_BIN_SPAN_MS) {
+        lostToSpan += 1;
+        continue;
+      }
       binsAccepted += 1;
     }
-    return { threshold, binsAccepted, lostToGap, lostToSampleCount };
+    return { threshold, binsAccepted, lostToGap, lostToSampleCount, lostToSpan };
   });
   const bins = entries.flatMap(([index, bucket]) => {
     const bin = qualifyBin(index, bucket, options, (reason) => {
