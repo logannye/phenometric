@@ -47,7 +47,7 @@ function loadProcessor(): new () => {
         name: string,
         processor: typeof registered
       ) => {
-        expect(name).toBe("phenometrix-voice-capture");
+        expect(name).toBe("phenometric-voice-capture");
         registered = processor;
       },
       sampleRate: 48_000,
@@ -96,7 +96,7 @@ describe("voice capture AudioWorklet", () => {
     renderBlock(processor, 0.25);
     expect(blocks).toHaveLength(1);
     expect(blocks[0]).toMatchObject({
-      schemaVersion: "phenometrix.voice-worklet-message.v1",
+      schemaVersion: "phenometric.voice-worklet-message.v1",
       type: "pcm-block",
       captureEpoch: 7,
       sequence: 1,

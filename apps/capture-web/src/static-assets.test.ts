@@ -19,7 +19,7 @@ describe("static asset manifest", () => {
 
   it("rejects root-relative and escaping paths", () => {
     const template = {
-      schemaVersion: "phenometrix.static-assets.v1",
+      schemaVersion: "phenometric.static-assets.v1",
       assets: {}
     };
     expect(() =>
