@@ -5,7 +5,7 @@ import {
   resolveLateAudio
 } from "./ambient-browser-fixture.js";
 
-const appUrl = "/phenometric/";
+const appUrl = "/phenometrix/";
 
 async function consentAndStart(page: Page): Promise<void> {
   await page.locator("#consent-checkbox").check();

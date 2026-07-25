@@ -505,3 +505,47 @@ describe("tier-2 events survive a withheld metric", () => {
     expect(result.events?.blinks).toEqual([]);
   });
 });
+
+describe("tier-2 events survive a session no bin qualifies", () => {
+  /** Blinking normally, but pitched past the 10-degree limit throughout. */
+  function pitchedAwayFrames(): AmbientFacialFrame[] {
+    return ambientFaceFrames(70_000, 30, (frame) => ({
+      pose: { yawDegrees: 2, pitchDegrees: 14, rollDegrees: 2 }
+    }));
+  }
+
+  it("records blinks when every bin fails the pose gate", () => {
+    // Reproduces a real 70-second session: a face in frame the whole time, a
+    // systematic pose offset from a low-mounted camera, 0 of 14 bins accepted,
+    // and consequently not one blink recorded. Detection had been reading the
+    // qualifying bins, so it inherited a gate built for cross-frame geometric
+    // comparison -- a standard a blink does not need.
+    const result = extractAmbientFaceMetrics(pitchedAwayFrames(), OPTIONS);
+
+    expect(
+      result.outcomes.every((outcome) => outcome.status === "withheld")
+    ).toBe(true);
+    expect((result.events?.blinks ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("marks those events as outside the measurement pose limits", () => {
+    // The events exist, and they say plainly that a left-versus-right
+    // comparison of them would not be trustworthy. Rate and timing can use
+    // them; asymmetry should not.
+    const result = extractAmbientFaceMetrics(pitchedAwayFrames(), OPTIONS);
+    const blinks = result.events?.blinks ?? [];
+    expect(blinks.length).toBeGreaterThan(0);
+    expect(
+      blinks.every((blink) => blink.poseWithinMeasurementLimits === false)
+    ).toBe(true);
+  });
+
+  it("flags events as within limits when the pose is good", () => {
+    const result = extractAmbientFaceMetrics(ambientFaceFrames(), OPTIONS);
+    const blinks = result.events?.blinks ?? [];
+    expect(blinks.length).toBeGreaterThan(0);
+    expect(
+      blinks.every((blink) => blink.poseWithinMeasurementLimits === true)
+    ).toBe(true);
+  });
+});

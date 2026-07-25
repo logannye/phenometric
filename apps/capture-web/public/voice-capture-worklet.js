@@ -60,7 +60,7 @@ class PhenoMetrixVoiceCaptureProcessor extends AudioWorkletProcessor {
     this.absoluteSampleIndex += this.blockSamples;
     this.dataPort.postMessage(
       {
-        schemaVersion: "phenometric.voice-worklet-message.v1",
+        schemaVersion: "phenometrix.voice-worklet-message.v1",
         type: "pcm-block",
         captureEpoch: this.captureEpoch,
         sequence: this.sequence,
@@ -97,6 +97,6 @@ class PhenoMetrixVoiceCaptureProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor(
-  "phenometric-voice-capture",
+  "phenometrix-voice-capture",
   PhenoMetrixVoiceCaptureProcessor
 );

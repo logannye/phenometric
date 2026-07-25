@@ -64,6 +64,17 @@ export interface BlinkEventRecord {
   closedDwellMs: number;
   /** Frames that contributed. A low count means the phases are coarse. */
   frameCount: number;
+  /**
+   * Whether every frame spanning this event stayed inside the pose limits the
+   * session metrics require.
+   *
+   * Detection runs on a looser stream than measurement, because a blink or a
+   * mouth movement is recoverable at a head angle that would invalidate a
+   * left-versus-right geometric comparison. Rate and timing can use every
+   * event; anything comparing the two sides should use only those flagged
+   * true.
+   */
+  poseWithinMeasurementLimits: boolean;
 }
 
 /**
@@ -95,6 +106,17 @@ export interface ExpressionEventRecord {
   /** Lid aperture change at peak, per side, for oculo-oral coupling. */
   lidApertureDeltaLeft: number;
   lidApertureDeltaRight: number;
+  /**
+   * Whether every frame spanning this event stayed inside the pose limits the
+   * session metrics require.
+   *
+   * Detection runs on a looser stream than measurement, because a blink or a
+   * mouth movement is recoverable at a head angle that would invalidate a
+   * left-versus-right geometric comparison. Rate and timing can use every
+   * event; anything comparing the two sides should use only those flagged
+   * true.
+   */
+  poseWithinMeasurementLimits: boolean;
 }
 
 /** What ended a stretch of speech, which decides what the silence measures. */
@@ -157,3 +179,19 @@ export interface SessionEventRecords {
   pauses: readonly PauseEventRecord[];
   speechRuns: readonly SpeechRunEventRecord[];
 }
+
+/*
+ * What a detector produces, before pose context is attached.
+ *
+ * The detectors work on geometry alone and have no view of the pose limits the
+ * session metrics impose, so they must not assert that field. Whatever holds
+ * both the events and the pose stream fills it in.
+ */
+export type DetectedBlink = Omit<
+  BlinkEventRecord,
+  "poseWithinMeasurementLimits"
+>;
+export type DetectedExpression = Omit<
+  ExpressionEventRecord,
+  "poseWithinMeasurementLimits"
+>;

@@ -12,6 +12,8 @@ import {
 } from "./expression-events.js";
 import type {
   BlinkEventRecord,
+  DetectedBlink,
+  ExpressionEventRecord,
   SubjectSide
 } from "./kinematic-events.js";
 import {
@@ -310,6 +312,53 @@ function ambientFrameUsable(
   options: AmbientFaceExtractionOptions
 ): boolean {
   return frameGateFailures(frame, options).length === 0;
+}
+
+/**
+ * Whether a frame can support Tier-2 event detection.
+ *
+ * Deliberately looser than {@link ambientFrameUsable}: it drops the pose and
+ * calibrated-scale gates and keeps attribution, image quality, and geometry
+ * completeness.
+ *
+ * Those pose limits exist so that CROSS-FRAME GEOMETRIC COMPARISON stays valid
+ * -- comparing one corner against the other, measuring asymmetry. A blink is
+ * not that. It is a relative aperture change within one eye over about 150 ms,
+ * during which the head pose is essentially constant, so it survives a 15 degree
+ * turn intact. Holding event detection to a standard designed for a different
+ * measurement cost a real 70-second session every blink and expression it
+ * contained.
+ *
+ * Events carry {@link BlinkEventRecord.poseWithinMeasurementLimits} so a
+ * consumer that DOES need geometric comparability can still filter to the
+ * stricter set.
+ */
+function tier2FrameUsable(frame: AmbientFacialFrame): boolean {
+  return (
+    frame.faceCount === 1 &&
+    faceTrackSegmentId(frame) !== null &&
+    evaluateVisualQuality(frame, null).usable &&
+    completeGeometry(frame)
+  );
+}
+
+/** Whether every frame spanning an event stayed inside the Tier-3 pose limits. */
+function poseWithinLimits(
+  frames: readonly AmbientFacialFrame[],
+  startMs: number,
+  endMs: number,
+  options: AmbientFaceExtractionOptions
+): boolean {
+  const spanning = frames.filter(
+    (frame) => frame.tMs >= startMs && frame.tMs <= endMs
+  );
+  if (spanning.length === 0) return false;
+  return spanning.every((frame) => {
+    const failures = frameGateFailures(frame, options);
+    return !failures.some((reason) =>
+      reason === "yaw" || reason === "pitch" || reason === "roll"
+    );
+  });
 }
 
 function mouthWidth(frame: AmbientFacialFrame): number {
@@ -786,8 +835,19 @@ function p95Gaps(bins: readonly FacialBin[]): number {
   return gaps.length > 0 ? percentile(gaps, 0.95) : Number.POSITIVE_INFINITY;
 }
 
+/**
+ * The detector needs only an ordered group of frames and an index to attribute
+ * results to. A qualifying bin satisfies this, and so does the raw frame stream
+ * wrapped as a single group -- which is what lets Tier-2 extraction run without
+ * inheriting the pose gating a bin implies.
+ */
+interface FrameGroup {
+  index: number;
+  frames: AmbientFacialFrame[];
+}
+
 /** One eye's blink, plus the bin it peaked in so per-bin rates survive. */
-interface BinnedBlink extends BlinkEventRecord {
+interface BinnedBlink extends DetectedBlink {
   binIndex: number;
 }
 
@@ -805,7 +865,7 @@ interface BinnedBlink extends BlinkEventRecord {
  * waveform, three findings, none of them recoverable from a count.
  */
 function detectBlinksForEye(
-  bins: readonly FacialBin[],
+  bins: readonly FrameGroup[],
   side: SubjectSide,
   apertureOf: (frame: AmbientFacialFrame) => number
 ): BinnedBlink[] {
@@ -924,7 +984,7 @@ function detectBlinksForEye(
 }
 
 /** Every blink from both eyes, ordered by the moment of maximum closure. */
-function detectBlinkEvents(bins: readonly FacialBin[]): BinnedBlink[] {
+function detectBlinkEvents(bins: readonly FrameGroup[]): BinnedBlink[] {
   return [
     ...detectBlinksForEye(bins, "left", (frame) => frame.eyeAperture!.left),
     ...detectBlinksForEye(bins, "right", (frame) => frame.eyeAperture!.right)
@@ -939,7 +999,7 @@ function detectBlinkEvents(bins: readonly FacialBin[]): BinnedBlink[] {
  * closure now exists as an event without inflating that count.
  */
 function detectBlinks(
-  bins: readonly FacialBin[]
+  bins: readonly FrameGroup[]
 ): { count: number; perBinCounts: number[]; events: BinnedBlink[] } {
   const events = detectBlinkEvents(bins);
   const perBinCounts = bins.map(() => 0);
@@ -981,6 +1041,10 @@ export function extractAmbientFaceMetrics(
   // outcomes. An outcome carries one value by construction, so a series cannot
   // travel inside it.
   const blinkEvents: BlinkEventRecord[] = [];
+  // Ordered, attribution- and geometry-complete frames without the pose gate.
+  const tier2Frames = [...inRange]
+    .filter(tier2FrameUsable)
+    .sort((left, right) => left.tMs - right.tMs);
   const screening = screenBins(inRange, options);
   const evidence = evidenceFor(inRange, screening.bins);
   const failure = commonFailure(screening, options);
@@ -1105,9 +1169,31 @@ export function extractAmbientFaceMetrics(
     screening.bins.length > 0
       ? detectBlinks(screening.bins)
       : { count: 0, perBinCounts: [] as number[], events: [] as BinnedBlink[] };
-  blinkEvents.push(
-    ...blinks.events.map(({ binIndex: _binIndex, ...event }) => event)
-  );
+
+  /*
+   * Tier-2 events come from the LOOSE stream, not the qualifying bins.
+   *
+   * The published blink rate above stays bin-derived and unchanged: it is
+   * explicitly a rate over pose-qualified windows. These events answer a
+   * different question -- what did the session actually contain -- and a
+   * session whose bins all failed the pose gate still contained blinks.
+   */
+  if (tier2Frames.length > 0) {
+    for (const event of detectBlinkEvents([
+      { index: 0, frames: tier2Frames }
+    ])) {
+      const { binIndex: _binIndex, ...record } = event;
+      blinkEvents.push({
+        ...record,
+        poseWithinMeasurementLimits: poseWithinLimits(
+          tier2Frames,
+          record.onsetMs,
+          record.offsetMs,
+          options
+        )
+      });
+    }
+  }
 
   if (blinkFailure) {
     outcomes.push(
@@ -1150,6 +1236,34 @@ export function extractAmbientFaceMetrics(
           screening.bins.reduce((total, bin) => total + bin.durationMs, 0)
         )
       : null;
+
+  /*
+   * Expressions are detected on the loose stream for the same reason blinks are:
+   * a mouth movement is recoverable at a head angle that would invalidate a
+   * left-versus-right comparison of it. The per-side excursion METRICS below
+   * still come from the qualifying bins; these events are the record of what
+   * the session contained.
+   */
+  const looseExpressions =
+    tier2Frames.length > 0
+      ? summarizeExpressions(
+          tier2Frames,
+          tier2Frames.length > 1
+            ? tier2Frames.at(-1)!.tMs - tier2Frames[0].tMs
+            : 0
+        )
+      : null;
+  const expressionEvents: ExpressionEventRecord[] = (
+    looseExpressions?.events ?? []
+  ).map((event) => ({
+    ...event,
+    poseWithinMeasurementLimits: poseWithinLimits(
+      tier2Frames,
+      event.startMs,
+      event.endMs,
+      options
+    )
+  }));
 
   const expressionEvidence = evidenceFor(inRange, screening.bins, {
     expressionEventCount: expressionSummary?.eventCount,
@@ -1367,7 +1481,7 @@ export function extractAmbientFaceMetrics(
       blinks: blinkEvents,
       // Already fully computed for the summary and previously reduced to two
       // integers before anything could see them.
-      expressions: expressionSummary?.events ?? []
+      expressions: expressionEvents
     },
     diagnostics: screening.diagnostics
   };

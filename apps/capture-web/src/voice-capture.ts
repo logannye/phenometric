@@ -63,7 +63,7 @@ export async function startVoiceCapturePipeline(
     options.audioContext.createMediaStreamSource(options.stream);
   const worklet = new AudioWorkletNode(
     options.audioContext,
-    "phenometric-voice-capture",
+    "phenometrix-voice-capture",
     {
       numberOfInputs: 1,
       numberOfOutputs: 1,

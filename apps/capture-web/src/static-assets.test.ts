@@ -12,14 +12,14 @@ describe("static asset manifest", () => {
     expect(
       resolveAssetUrl(
         "models/face_landmarker.task",
-        "https://example.test/tools/phenometric/index.html"
+        "https://example.test/tools/phenometrix/index.html"
       )
-    ).toBe("https://example.test/tools/phenometric/models/face_landmarker.task");
+    ).toBe("https://example.test/tools/phenometrix/models/face_landmarker.task");
   });
 
   it("rejects root-relative and escaping paths", () => {
     const template = {
-      schemaVersion: "phenometric.static-assets.v1",
+      schemaVersion: "phenometrix.static-assets.v1",
       assets: {}
     };
     expect(() =>
