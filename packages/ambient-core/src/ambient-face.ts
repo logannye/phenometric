@@ -114,6 +114,63 @@ interface BinScreening {
   bins: FacialBin[];
   attributionFailureCount: number;
   qualityFailureCount: number;
+  diagnostics: FaceScreeningDiagnostics;
+}
+
+/**
+ * Why a session measured what it measured, or why it measured nothing.
+ *
+ * Diagnostic only: no metric reads this, and it carries counts and pose
+ * statistics rather than any per-frame series. It exists because a report full
+ * of abstentions currently looks identical whether the camera saw nobody or saw
+ * a face that never held still enough for a bin to qualify -- and those call
+ * for opposite fixes.
+ */
+export interface FaceScreeningDiagnostics {
+  frameCount: number;
+  usableFrameCount: number;
+  /** Frames failing each gate. A frame can fail several, so these overlap. */
+  frameGateFailures: Record<string, number>;
+  /** Absolute pose in degrees across all frames carrying one. */
+  pose: {
+    yawP50: number; yawP95: number;
+    pitchP50: number; pitchP95: number;
+    rollP50: number; rollP95: number;
+  } | null;
+  binsConsidered: number;
+  binsAccepted: number;
+  /** First failing check per rejected bin. */
+  binRejections: Record<string, number>;
+  /**
+   * Per bin, how much of it survived the frame gate and what that leaves.
+   *
+   * `maxUsableGapMs` is the largest hole between consecutive USABLE frames --
+   * the gap that would exist if unusable frames were dropped rather than the
+   * whole bin. It is the reason a fractional gate is not obviously a fix:
+   * dropping a burst of bad frames leaves a hole, and the gap rule may simply
+   * become the new binding constraint.
+   */
+  bins: Array<{
+    index: number;
+    frameCount: number;
+    usableFrameCount: number;
+    usableFraction: number;
+    maxUsableGapMs: number;
+  }>;
+  /**
+   * Bins that WOULD qualify at each candidate frame-usability threshold, if the
+   * all-or-nothing rule were replaced by a fractional one.
+   *
+   * Simulates the full consequence, not just the fraction: a bin counts only if
+   * it also keeps enough usable frames and leaves no gap wider than the
+   * existing limit. This is what the threshold should be chosen from.
+   */
+  acceptanceCurve: Array<{
+    threshold: number;
+    binsAccepted: number;
+    lostToGap: number;
+    lostToSampleCount: number;
+  }>;
 }
 
 function finite(value: number): boolean {
@@ -210,25 +267,49 @@ function calibratedSizeUsable(
   );
 }
 
+/**
+ * Every gate a frame failed, empty when it is usable.
+ *
+ * The boolean predicate is derived from this rather than duplicating it, so the
+ * diagnostic view and the measurement path can never disagree about why a frame
+ * was dropped. Without this the extractor rejects frames silently, and a session
+ * that abstains is indistinguishable from one that never saw a face.
+ */
+export function frameGateFailures(
+  frame: AmbientFacialFrame,
+  options: AmbientFaceExtractionOptions
+): string[] {
+  const reasons: string[] = [];
+  const pose = frame.pose;
+  if (frame.faceCount !== 1) reasons.push("face-count");
+  if (faceTrackSegmentId(frame) === null) reasons.push("no-track-id");
+  if (!evaluateVisualQuality(frame, null).usable) reasons.push("image-quality");
+  if (pose === null) {
+    reasons.push("no-pose");
+  } else {
+    if (!finite(pose.yawDegrees) ||
+        Math.abs(pose.yawDegrees) > AMBIENT_FACE_MAX_YAW_DEGREES) {
+      reasons.push("yaw");
+    }
+    if (!finite(pose.pitchDegrees) ||
+        Math.abs(pose.pitchDegrees) > AMBIENT_FACE_MAX_PITCH_DEGREES) {
+      reasons.push("pitch");
+    }
+    if (!finite(pose.rollDegrees) ||
+        Math.abs(pose.rollDegrees) > AMBIENT_FACE_MAX_ROLL_DEGREES) {
+      reasons.push("roll");
+    }
+  }
+  if (!calibratedSizeUsable(frame, options)) reasons.push("face-scale");
+  if (!completeGeometry(frame)) reasons.push("incomplete-geometry");
+  return reasons;
+}
+
 function ambientFrameUsable(
   frame: AmbientFacialFrame,
   options: AmbientFaceExtractionOptions
 ): boolean {
-  const pose = frame.pose;
-  return (
-    frame.faceCount === 1 &&
-    faceTrackSegmentId(frame) !== null &&
-    evaluateVisualQuality(frame, null).usable &&
-    pose !== null &&
-    finite(pose.yawDegrees) &&
-    Math.abs(pose.yawDegrees) <= AMBIENT_FACE_MAX_YAW_DEGREES &&
-    finite(pose.pitchDegrees) &&
-    Math.abs(pose.pitchDegrees) <= AMBIENT_FACE_MAX_PITCH_DEGREES &&
-    finite(pose.rollDegrees) &&
-    Math.abs(pose.rollDegrees) <= AMBIENT_FACE_MAX_ROLL_DEGREES &&
-    calibratedSizeUsable(frame, options) &&
-    completeGeometry(frame)
-  );
+  return frameGateFailures(frame, options).length === 0;
 }
 
 function mouthWidth(frame: AmbientFacialFrame): number {
@@ -314,10 +395,22 @@ function binValues(
 function qualifyBin(
   index: number,
   frames: AmbientFacialFrame[],
-  options: AmbientFaceExtractionOptions
+  options: AmbientFaceExtractionOptions,
+  onReject?: (reason: string) => void
 ): FacialBin | null {
-  if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) return null;
-  if (!frames.every((frame) => ambientFrameUsable(frame, options))) return null;
+  const reject = (reason: string): null => {
+    onReject?.(reason);
+    return null;
+  };
+  if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
+    return reject("too-few-frames");
+  }
+  if (!frames.every((frame) => ambientFrameUsable(frame, options))) {
+    // All-or-nothing by design: one unusable frame discards the whole bin. In
+    // real capture this is the gate most likely to dominate, which is exactly
+    // why it now says so.
+    return reject("frame-gate");
+  }
   const processorRefs = new Set(frames.map((frame) => frame.processorRef));
   const trackSegmentIds = new Set(frames.map(faceTrackSegmentId));
   const epochs = new Set(frames.map((frame) => frame.captureEpoch));
@@ -326,7 +419,7 @@ function qualifyBin(
     trackSegmentIds.size !== 1 ||
     epochs.size !== 1
   ) {
-    return null;
+    return reject("mixed-provenance");
   }
   const gaps = frames
     .slice(1)
@@ -336,7 +429,7 @@ function qualifyBin(
       (gap) => gap <= 0 || gap > AMBIENT_FACE_MAX_FRAME_GAP_MS
     )
   ) {
-    return null;
+    return reject("frame-gap");
   }
   const actualSpanMs = frames.at(-1)!.tMs - frames[0].tMs;
   const stepMs = nominalStepMs(frames);
@@ -350,7 +443,7 @@ function qualifyBin(
     actualSpanMs < AMBIENT_FACE_MIN_BIN_SPAN_MS ||
     durationMs < AMBIENT_FACE_MIN_BIN_DATA_MS
   ) {
-    return null;
+    return reject("short-bin");
   }
   const sizes = frames.map((frame) =>
     Math.sqrt(
@@ -364,7 +457,7 @@ function qualifyBin(
     sizeP10 <= 0 ||
     sizeP90 / sizeP10 > AMBIENT_FACE_MAX_WITHIN_BIN_SIZE_RATIO
   ) {
-    return null;
+    return reject("scale-drift");
   }
   const startMs = options.sessionStartedAtMs + index * AMBIENT_FACE_BIN_MS;
   const processorRef = frames[0].processorRef;
@@ -411,13 +504,92 @@ function screenBins(
     bucket.push(frame);
     buckets.set(index, bucket);
   }
-  const bins = [...buckets.entries()]
-    .sort(([left], [right]) => left - right)
-    .flatMap(([index, bucket]) => {
-      const bin = qualifyBin(index, bucket, options);
-      return bin ? [bin] : [];
+  const gateFailures: Record<string, number> = {};
+  let usableFrameCount = 0;
+  for (const frame of frames) {
+    const failures = frameGateFailures(frame, options);
+    if (failures.length === 0) usableFrameCount += 1;
+    for (const reason of failures) {
+      gateFailures[reason] = (gateFailures[reason] ?? 0) + 1;
+    }
+  }
+  const poses = frames
+    .map((frame) => frame.pose)
+    .filter((pose): pose is NonNullable<typeof pose> => pose !== null);
+  const absAt = (pick: (p: NonNullable<AmbientFacialFrame["pose"]>) => number, q: number) =>
+    percentile(poses.map((pose) => Math.abs(pick(pose))), q);
+
+  const binRejections: Record<string, number> = {};
+  const entries = [...buckets.entries()].sort(([left], [right]) => left - right);
+
+  const binStats = entries.map(([index, bucket]) => {
+    const usable = bucket.filter((frame) => ambientFrameUsable(frame, options));
+    let maxUsableGapMs = 0;
+    for (let position = 1; position < usable.length; position += 1) {
+      maxUsableGapMs = Math.max(
+        maxUsableGapMs,
+        usable[position].tMs - usable[position - 1].tMs
+      );
+    }
+    return {
+      index,
+      frameCount: bucket.length,
+      usableFrameCount: usable.length,
+      usableFraction:
+        bucket.length > 0 ? usable.length / bucket.length : 0,
+      maxUsableGapMs
+    };
+  });
+
+  const acceptanceCurve = [1, 0.98, 0.95, 0.9, 0.85, 0.8].map((threshold) => {
+    let binsAccepted = 0;
+    let lostToGap = 0;
+    let lostToSampleCount = 0;
+    for (const bin of binStats) {
+      if (bin.usableFraction < threshold) continue;
+      if (bin.usableFrameCount < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
+        lostToSampleCount += 1;
+        continue;
+      }
+      if (bin.maxUsableGapMs > AMBIENT_FACE_MAX_FRAME_GAP_MS) {
+        lostToGap += 1;
+        continue;
+      }
+      binsAccepted += 1;
+    }
+    return { threshold, binsAccepted, lostToGap, lostToSampleCount };
+  });
+  const bins = entries.flatMap(([index, bucket]) => {
+    const bin = qualifyBin(index, bucket, options, (reason) => {
+      binRejections[reason] = (binRejections[reason] ?? 0) + 1;
     });
-  return { bins, attributionFailureCount, qualityFailureCount };
+    return bin ? [bin] : [];
+  });
+  return {
+    bins,
+    attributionFailureCount,
+    qualityFailureCount,
+    diagnostics: {
+      frameCount: frames.length,
+      usableFrameCount,
+      frameGateFailures: gateFailures,
+      pose: poses.length > 0
+        ? {
+            yawP50: absAt((pose) => pose.yawDegrees, 0.5),
+            yawP95: absAt((pose) => pose.yawDegrees, 0.95),
+            pitchP50: absAt((pose) => pose.pitchDegrees, 0.5),
+            pitchP95: absAt((pose) => pose.pitchDegrees, 0.95),
+            rollP50: absAt((pose) => pose.rollDegrees, 0.5),
+            rollP95: absAt((pose) => pose.rollDegrees, 0.95)
+          }
+        : null,
+      binsConsidered: entries.length,
+      binsAccepted: bins.length,
+      binRejections,
+      bins: binStats,
+      acceptanceCurve
+    }
+  };
 }
 
 function evidenceFor(
@@ -918,6 +1090,25 @@ export function extractAmbientFaceMetrics(
       detail: "Bilateral blink rate requires a P95 frame gap no greater than 75 ms."
     };
   }
+  /*
+   * Detection runs whenever there are bins to run it on, independent of whether
+   * the blink METRIC publishes.
+   *
+   * This used to sit inside the else branch below, so a session that failed the
+   * 60-second exposure gate discarded every blink it had actually observed. A
+   * 54-second session with a face in frame throughout reported zero blinks --
+   * not because none occurred, but because a publication threshold suppressed
+   * the extraction feeding it. Tier 2 exists precisely so an abstaining metric
+   * still leaves its observations behind.
+   */
+  const blinks =
+    screening.bins.length > 0
+      ? detectBlinks(screening.bins)
+      : { count: 0, perBinCounts: [] as number[], events: [] as BinnedBlink[] };
+  blinkEvents.push(
+    ...blinks.events.map(({ binIndex: _binIndex, ...event }) => event)
+  );
+
   if (blinkFailure) {
     outcomes.push(
       withheldOutcome(
@@ -929,10 +1120,6 @@ export function extractAmbientFaceMetrics(
       )
     );
   } else {
-    const blinks = detectBlinks(screening.bins);
-    blinkEvents.push(
-      ...blinks.events.map(({ binIndex: _binIndex, ...event }) => event)
-    );
     const blinkEvidence = evidenceFor(inRange, screening.bins, {
       frontalExposureMs,
       blinkCount: blinks.count
@@ -1181,6 +1368,7 @@ export function extractAmbientFaceMetrics(
       // Already fully computed for the summary and previously reduced to two
       // integers before anything could see them.
       expressions: expressionSummary?.events ?? []
-    }
+    },
+    diagnostics: screening.diagnostics
   };
 }

@@ -475,3 +475,33 @@ describe("blink events", () => {
     expect(left[0].depth).toBeLessThan(right[0].depth);
   });
 });
+
+describe("tier-2 events survive a withheld metric", () => {
+  it("extracts blinks from a session too short for the blink metric", () => {
+    // Regression from a real 54-second session: the blink metric requires 60 s
+    // of frontal exposure, and detection sat inside the branch that only ran
+    // when that gate passed. Every blink actually observed was discarded
+    // because a PUBLICATION threshold suppressed the EXTRACTION beneath it.
+    // Tier 2 exists so an abstaining metric still leaves its observations.
+    const frames = ambientFaceFrames(40_000);
+    const result = extractAmbientFaceMetrics(frames, OPTIONS);
+
+    const rate = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.blink_rate.bilateral"
+    );
+    expect(rate?.status).toBe("withheld");
+    if (rate?.status === "withheld") {
+      expect(rate.reasonCode).toBe("insufficient-exposure");
+    }
+
+    // The metric abstains; the events do not vanish with it.
+    expect((result.events?.blinks ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("reports no blinks rather than throwing when nothing qualified", () => {
+    // No bins at all is a different statement from no blinks, and it must not
+    // reach the detector's percentile of an empty set.
+    const result = extractAmbientFaceMetrics([], OPTIONS);
+    expect(result.events?.blinks).toEqual([]);
+  });
+});

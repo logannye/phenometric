@@ -94,6 +94,33 @@ interface VoiceSegment {
   sourceWindowRef: string;
 }
 
+/**
+ * Why the voice lane measured what it measured.
+ *
+ * The face lane's equivalent showed that a report of abstentions says nothing
+ * about whether the camera saw a face. The same was true here and worse: a
+ * silent voice lane could mean the participant did not speak, or that every
+ * frame failed an acquisition gate, and nothing distinguished them.
+ */
+export interface VoiceScreeningDiagnostics {
+  frameCount: number;
+  /** Frames passing every acquisition gate. */
+  usableFrameCount: number;
+  speechActiveFrameCount: number;
+  periodicFrameCount: number;
+  /** Frames failing each gate; a frame can fail several. */
+  frameGateFailures: Record<string, number>;
+  segmentsAccepted: number;
+  eligibleDurationMs: number;
+  activeSpeechMs: number;
+  /** What the extractor needs before any timing metric can publish. */
+  requirements: {
+    minimumSegments: number;
+    minimumEligibleSpanMs: number;
+    minimumActiveSpeechMs: number;
+  };
+}
+
 interface RunDurations {
   speechRunsMs: number[];
   pausesMs: number[];
@@ -105,6 +132,43 @@ function clamp01(value: number): number {
 
 function finite(value: number): boolean {
   return Number.isFinite(value);
+}
+
+/** Every acquisition gate a voice frame failed; empty when usable. */
+export function voiceFrameGateFailures(frame: AmbientVoiceFrame): string[] {
+  const reasons: string[] = [];
+  const active = frame.speechActive;
+  if (frame.taskContext !== AMBIENT_VOICE_TASK_CONTEXT) reasons.push("task-context");
+  if (typeof frame.trackSegmentId !== "string" || frame.trackSegmentId.length === 0) {
+    reasons.push("no-track-id");
+  }
+  if (!finite(frame.tMs)) reasons.push("no-timestamp");
+  if (!finite(frame.sampleRateHz) || frame.sampleRateHz < AMBIENT_VOICE_MIN_SAMPLE_RATE_HZ) {
+    reasons.push("sample-rate");
+  }
+  if (!finite(frame.blockGapMs) || frame.blockGapMs > AMBIENT_VOICE_MAX_GAP_MS) {
+    reasons.push("block-gap");
+  }
+  if (!finite(frame.lostBlockFraction) ||
+      frame.lostBlockFraction > AMBIENT_VOICE_MAX_LOST_BLOCK_FRACTION) {
+    reasons.push("lost-blocks");
+  }
+  if (!finite(frame.clippedSampleFraction) ||
+      frame.clippedSampleFraction > AMBIENT_VOICE_MAX_CLIPPED_FRACTION) {
+    reasons.push("clipping");
+  }
+  if (!finite(frame.dcOffset) ||
+      Math.abs(frame.dcOffset) > AMBIENT_VOICE_MAX_ABSOLUTE_DC_OFFSET) {
+    reasons.push("dc-offset");
+  }
+  if (active && (!finite(frame.snrDb) || frame.snrDb < AMBIENT_VOICE_MIN_SPEECH_SNR_DB)) {
+    reasons.push("speech-snr");
+  }
+  const blocking = frame.qualityReasons.filter((reason) =>
+    FRAME_BLOCKING_REASONS.has(reason)
+  );
+  for (const reason of blocking) reasons.push(`quality:${reason}`);
+  return reasons;
 }
 
 function timingFrameUsable(frame: AmbientVoiceFrame): boolean {
@@ -958,9 +1022,40 @@ export function extractAmbientVoiceMetrics(
     }
     return outcome;
   });
+  const voiceGateFailures: Record<string, number> = {};
+  let usableVoiceFrames = 0;
+  for (const frame of inRange) {
+    const failures = voiceFrameGateFailures(frame);
+    if (failures.length === 0) usableVoiceFrames += 1;
+    for (const reason of failures) {
+      voiceGateFailures[reason] = (voiceGateFailures[reason] ?? 0) + 1;
+    }
+  }
+  const voiceDiagnostics: VoiceScreeningDiagnostics = {
+    frameCount: inRange.length,
+    usableFrameCount: usableVoiceFrames,
+    speechActiveFrameCount: inRange.filter((frame) => frame.speechActive).length,
+    periodicFrameCount: inRange.filter((frame) => frame.periodic).length,
+    frameGateFailures: voiceGateFailures,
+    segmentsAccepted: segments.length,
+    eligibleDurationMs: segments.reduce(
+      (total, segment) => total + segment.durationMs,
+      0
+    ),
+    activeSpeechMs: segments.reduce(
+      (total, segment) => total + segment.activeDurationMs,
+      0
+    ),
+    requirements: {
+      minimumSegments: AMBIENT_VOICE_MIN_SEGMENTS,
+      minimumEligibleSpanMs: AMBIENT_VOICE_TIMING_MIN_MS,
+      minimumActiveSpeechMs: AMBIENT_VOICE_ACTIVE_MIN_MS
+    }
+  };
   return {
     outcomes: ordered,
     ignoredFrameCount,
-    events: { pauses: pauseEvents, speechRuns: speechRunEvents }
+    events: { pauses: pauseEvents, speechRuns: speechRunEvents },
+    diagnostics: voiceDiagnostics
   };
 }
