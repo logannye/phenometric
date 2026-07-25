@@ -218,9 +218,17 @@ describe("extractAmbientFaceMetrics", () => {
   });
 
   it("rejects bins beyond strict ambient pose, gap, and sample thresholds", () => {
+    // Pose limits measure DEVIATION from the session's resting pose, so a
+    // constant offset no longer rejects anything -- that is the laptop-camera
+    // case, and treating it as head movement was the defect. Rejection now
+    // requires the head to actually move relative to how it sat.
     const pose = extractAmbientFaceMetrics(
-      ambientFaceFrames(30_000, 30, () => ({
-        pose: { yawDegrees: 7.001, pitchDegrees: 0, rollDegrees: 0 }
+      ambientFaceFrames(30_000, 30, (frame, index) => ({
+        pose: {
+          yawDegrees: index % 2 === 0 ? 0 : 14.001,
+          pitchDegrees: 0,
+          rollDegrees: 0
+        }
       })),
       OPTIONS
     );
@@ -509,8 +517,12 @@ describe("tier-2 events survive a withheld metric", () => {
 describe("tier-2 events survive a session no bin qualifies", () => {
   /** Blinking normally, but pitched past the 10-degree limit throughout. */
   function pitchedAwayFrames(): AmbientFacialFrame[] {
-    return ambientFaceFrames(70_000, 30, (frame) => ({
-      pose: { yawDegrees: 2, pitchDegrees: 14, rollDegrees: 2 }
+    // Yaw beyond the RESTING bound, so the session has no admissible reference
+    // and gating falls back to frontal -- every frame then fails. A constant
+    // pitch offset would no longer do this, because that is precisely the
+    // camera-placement case the resting pose now absorbs.
+    return ambientFaceFrames(70_000, 30, () => ({
+      pose: { yawDegrees: 25, pitchDegrees: 2, rollDegrees: 2 }
     }));
   }
 

@@ -247,12 +247,44 @@ function reportCaptureDiagnostics(
     `  pauses       ${events?.pauses?.length ?? 0}`,
     `  speech runs  ${events?.speechRuns?.length ?? 0}`
   );
+  const report = `PhenoMetrix capture diagnostics\n${lines.join("\n")}`;
   // eslint-disable-next-line no-console
-  console.log(
-    `%cPhenoMetrix capture diagnostics%c\n${lines.join("\n")}`,
-    "font-weight:bold",
-    "font-weight:normal"
+  console.log(report);
+  publishDiagnosticsReport(report);
+}
+
+/**
+ * Makes the diagnostics copyable from the finish screen.
+ *
+ * Calibration is an iterate-and-rerun loop, and console-only output made every
+ * round cost a hand-copy or the whole session. Clipboard on an explicit click
+ * is the same act as selecting the text by hand: no storage, no file, no
+ * network, and nothing retained after the page closes.
+ */
+function publishDiagnosticsReport(report: string): void {
+  // The adapter is exercised headlessly in unit tests, where there is no DOM
+  // and no clipboard. Diagnostics are a browser affordance, not part of what
+  // this function computes.
+  if (typeof document === "undefined") return;
+  const button = document.querySelector<HTMLButtonElement>(
+    "#copy-diagnostics"
   );
+  if (!button || typeof navigator === "undefined" || !navigator.clipboard) {
+    return;
+  }
+  button.hidden = false;
+  button.onclick = () => {
+    void navigator.clipboard
+      .writeText(report)
+      .then(() => {
+        button.textContent = "Diagnostics copied";
+      })
+      .catch(() => {
+        // Clipboard permission can be refused; say so rather than appearing to
+        // have worked.
+        button.textContent = "Copy failed - select the console output";
+      });
+  };
 }
 
 function relevantEventCount(

@@ -43,10 +43,10 @@ const rawProtocolPack = {
   // 3.0.0: brow geometry and per-eye closure added (5 face metrics).
   // Sessions measured under different packs are not comparable, and the
   // content digest below makes that structurally visible rather than implicit.
-  version: "3.1.0",
+  version: "3.2.0",
   // SHA-256 of the canonical pack content with this field omitted.
   contentSha256:
-    "5d3ccce909f84b5a1f37e47f8d7e0b08f8cbcf6fea5cd2de09c3cf31261335a8",
+    "b12f5977a9bc1b23bbafbe6b01c5a5c9b4d535fa9ae2dd4fe5722ea49624ad11",
   status: "nonclinical-prototype",
   maximumSessionDurationMs: 300_000,
   supportedTarget: {
@@ -90,9 +90,12 @@ const rawProtocolPack = {
       minimumSamplesPerBin: 80,
       minimumBinSpanMs: 4_800,
       maximumFrameGapMs: 200,
-      maximumAbsoluteYawDegrees: 7,
-      maximumAbsolutePitchDegrees: 10,
-      maximumAbsoluteRollDegrees: 5,
+      maximumYawDeviationDegrees: 7,
+      maximumPitchDeviationDegrees: 10,
+      maximumRollDeviationDegrees: 5,
+      maximumRestingYawDegrees: 10,
+      maximumRestingPitchDegrees: 20,
+      maximumRestingRollDegrees: 15,
       maximumCalibrationScaleDeviation: 0.2,
       maximumWithinBinScaleRatio: 1.15,
       minimumBins: 3,

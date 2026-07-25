@@ -39,9 +39,87 @@ export const AMBIENT_FACE_MIN_SAMPLES_PER_BIN = 80;
 export const AMBIENT_FACE_MAX_FRAME_GAP_MS = 200;
 export const AMBIENT_FACE_MIN_BINS = 3;
 export const AMBIENT_FACE_MIN_SPAN_MS = 30_000;
+/*
+ * Pose limits are DEVIATION FROM THE SESSION'S RESTING POSE, not from frontal.
+ *
+ * A laptop camera sits below eye level, so a seated participant reads as
+ * several degrees of constant pitch that no amount of sitting still removes. A
+ * measured session showed a median pitch of 7.4 against a limit of 10 -- half
+ * the session at the ceiling before any head movement at all. Gating on
+ * absolute angle conflates "the camera is mounted low", which is constant and
+ * harmless, with "the subject turned away", which is neither.
+ *
+ * The resting pose is the session median, and how far IT may sit from frontal
+ * is bounded separately below, per axis, because the three rotations do not
+ * bias measurement equally.
+ */
 export const AMBIENT_FACE_MAX_YAW_DEGREES = 7;
 export const AMBIENT_FACE_MAX_PITCH_DEGREES = 10;
 export const AMBIENT_FACE_MAX_ROLL_DEGREES = 5;
+
+/*
+ * How far the resting pose itself may sit from frontal.
+ *
+ * These differ per axis on geometric grounds, not preference:
+ *
+ * YAW is rotation about the vertical axis, so it foreshortens one side of the
+ * face and not the other. A constant yaw offset therefore biases every
+ * left-versus-right measurement this system exists to make. Kept tight.
+ *
+ * PITCH is rotation about the horizontal axis and is symmetric across the
+ * midline: it moves both sides together and leaves asymmetry largely alone.
+ * This is also the axis camera placement actually offsets. Generous.
+ *
+ * ROLL is in-plane, and the coordinate system already cancels it by aligning
+ * its x-axis to the inter-eye line before measuring anything. Generous.
+ */
+export const AMBIENT_FACE_MAX_RESTING_YAW_DEGREES = 10;
+export const AMBIENT_FACE_MAX_RESTING_PITCH_DEGREES = 20;
+export const AMBIENT_FACE_MAX_RESTING_ROLL_DEGREES = 15;
+
+/** The pose a session is measured relative to. */
+export interface RestingPose {
+  yawDegrees: number;
+  pitchDegrees: number;
+  rollDegrees: number;
+}
+
+/**
+ * Session resting pose: the median of each axis across frames carrying one.
+ *
+ * Self-calibrating rather than taken from the calibration step, so it needs no
+ * capture-path or contract change and adapts to how the participant actually
+ * sat. Returns null when it falls outside the resting bounds -- a session spent
+ * genuinely turned away has no usable reference, and measuring deviation from a
+ * bad baseline would silently accept the whole thing.
+ */
+export function restingPose(
+  frames: readonly AmbientFacialFrame[]
+): RestingPose | null {
+  const poses = frames
+    .map((frame) => frame.pose)
+    .filter((pose): pose is NonNullable<typeof pose> => pose !== null)
+    .filter(
+      (pose) =>
+        finite(pose.yawDegrees) &&
+        finite(pose.pitchDegrees) &&
+        finite(pose.rollDegrees)
+    );
+  if (poses.length === 0) return null;
+  const resting = {
+    yawDegrees: median(poses.map((pose) => pose.yawDegrees)),
+    pitchDegrees: median(poses.map((pose) => pose.pitchDegrees)),
+    rollDegrees: median(poses.map((pose) => pose.rollDegrees))
+  };
+  if (
+    Math.abs(resting.yawDegrees) > AMBIENT_FACE_MAX_RESTING_YAW_DEGREES ||
+    Math.abs(resting.pitchDegrees) > AMBIENT_FACE_MAX_RESTING_PITCH_DEGREES ||
+    Math.abs(resting.rollDegrees) > AMBIENT_FACE_MAX_RESTING_ROLL_DEGREES
+  ) {
+    return null;
+  }
+  return resting;
+}
 export const AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA = 0.2;
 export const AMBIENT_FACE_MAX_WITHIN_BIN_SIZE_RATIO = 1.15;
 export const AMBIENT_BLINK_MIN_EXPOSURE_MS = 60_000;
@@ -139,6 +217,12 @@ export interface FaceScreeningDiagnostics {
     pitchP50: number; pitchP95: number;
     rollP50: number; rollP95: number;
   } | null;
+  /**
+   * The pose every frame in this session was judged relative to, or null when
+   * no reference inside the resting bounds existed and gating fell back to
+   * frontal.
+   */
+  restingPose: RestingPose | null;
   binsConsidered: number;
   binsAccepted: number;
   /** First failing check per rejected bin. */
@@ -282,7 +366,8 @@ function calibratedSizeUsable(
  */
 export function frameGateFailures(
   frame: AmbientFacialFrame,
-  options: AmbientFaceExtractionOptions
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null = null
 ): string[] {
   const reasons: string[] = [];
   const pose = frame.pose;
@@ -292,16 +377,27 @@ export function frameGateFailures(
   if (pose === null) {
     reasons.push("no-pose");
   } else {
+    // Deviation from the session's resting pose. A null reference means the
+    // session had none inside the resting bounds, and it falls back to frontal
+    // rather than accepting an arbitrary baseline.
+    const reference = resting ?? {
+      yawDegrees: 0,
+      pitchDegrees: 0,
+      rollDegrees: 0
+    };
     if (!finite(pose.yawDegrees) ||
-        Math.abs(pose.yawDegrees) > AMBIENT_FACE_MAX_YAW_DEGREES) {
+        Math.abs(pose.yawDegrees - reference.yawDegrees) >
+          AMBIENT_FACE_MAX_YAW_DEGREES) {
       reasons.push("yaw");
     }
     if (!finite(pose.pitchDegrees) ||
-        Math.abs(pose.pitchDegrees) > AMBIENT_FACE_MAX_PITCH_DEGREES) {
+        Math.abs(pose.pitchDegrees - reference.pitchDegrees) >
+          AMBIENT_FACE_MAX_PITCH_DEGREES) {
       reasons.push("pitch");
     }
     if (!finite(pose.rollDegrees) ||
-        Math.abs(pose.rollDegrees) > AMBIENT_FACE_MAX_ROLL_DEGREES) {
+        Math.abs(pose.rollDegrees - reference.rollDegrees) >
+          AMBIENT_FACE_MAX_ROLL_DEGREES) {
       reasons.push("roll");
     }
   }
@@ -312,9 +408,10 @@ export function frameGateFailures(
 
 function ambientFrameUsable(
   frame: AmbientFacialFrame,
-  options: AmbientFaceExtractionOptions
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null = null
 ): boolean {
-  return frameGateFailures(frame, options).length === 0;
+  return frameGateFailures(frame, options, resting).length === 0;
 }
 
 /**
@@ -337,11 +434,22 @@ function ambientFrameUsable(
  * stricter set.
  */
 function tier2FrameUsable(frame: AmbientFacialFrame): boolean {
-  return (
-    frame.faceCount === 1 &&
-    faceTrackSegmentId(frame) !== null &&
-    evaluateVisualQuality(frame, null).usable &&
-    completeGeometry(frame)
+  if (
+    frame.faceCount !== 1 ||
+    faceTrackSegmentId(frame) === null ||
+    !completeGeometry(frame)
+  ) {
+    return false;
+  }
+  // The image-quality assessment carries a SECOND pose gate of its own, looser
+  // than the extractor's but still absolute. Reading only `.usable` here made
+  // the decoupling incomplete: events still vanished once the head passed 15
+  // degrees, for the same reason and with the same consequence. Pose is
+  // excluded explicitly; everything else -- lighting, sharpness, framing -- is
+  // still required, because those DO corrupt the landmarks a blink is measured
+  // from.
+  return evaluateVisualQuality(frame, null).reasonCodes.every(
+    (reason) => reason === "pose-out-of-range"
   );
 }
 
@@ -350,14 +458,15 @@ function poseWithinLimits(
   frames: readonly AmbientFacialFrame[],
   startMs: number,
   endMs: number,
-  options: AmbientFaceExtractionOptions
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null
 ): boolean {
   const spanning = frames.filter(
     (frame) => frame.tMs >= startMs && frame.tMs <= endMs
   );
   if (spanning.length === 0) return false;
   return spanning.every((frame) => {
-    const failures = frameGateFailures(frame, options);
+    const failures = frameGateFailures(frame, options, resting);
     return !failures.some((reason) =>
       reason === "yaw" || reason === "pitch" || reason === "roll"
     );
@@ -448,6 +557,7 @@ function qualifyBin(
   index: number,
   candidateFrames: readonly AmbientFacialFrame[],
   options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null,
   onReject?: (reason: string) => void
 ): FacialBin | null {
   const reject = (reason: string): null => {
@@ -473,7 +583,7 @@ function qualifyBin(
    * `minimumDataPerBinMs` and `minimumSamplesPerBin` exist to bound.
    */
   const frames = candidateFrames.filter((frame) =>
-    ambientFrameUsable(frame, options)
+    ambientFrameUsable(frame, options, resting)
   );
   if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
     return reject("too-few-usable-frames");
@@ -565,13 +675,16 @@ function screenBins(
   options: AmbientFaceExtractionOptions
 ): BinScreening {
   const buckets = new Map<number, AmbientFacialFrame[]>();
+  // One reference for the whole session, so every bin is judged against the
+  // same baseline rather than drifting with local head position.
+  const resting = restingPose(frames);
   let attributionFailureCount = 0;
   let qualityFailureCount = 0;
   for (const frame of frames) {
     if (frame.faceCount !== 1 || faceTrackSegmentId(frame) === null) {
       attributionFailureCount += 1;
     }
-    if (!ambientFrameUsable(frame, options)) qualityFailureCount += 1;
+    if (!ambientFrameUsable(frame, options, resting)) qualityFailureCount += 1;
     const index = Math.floor(
       (frame.tMs - options.sessionStartedAtMs) / AMBIENT_FACE_BIN_MS
     );
@@ -582,7 +695,7 @@ function screenBins(
   const gateFailures: Record<string, number> = {};
   let usableFrameCount = 0;
   for (const frame of frames) {
-    const failures = frameGateFailures(frame, options);
+    const failures = frameGateFailures(frame, options, resting);
     if (failures.length === 0) usableFrameCount += 1;
     for (const reason of failures) {
       gateFailures[reason] = (gateFailures[reason] ?? 0) + 1;
@@ -598,7 +711,9 @@ function screenBins(
   const entries = [...buckets.entries()].sort(([left], [right]) => left - right);
 
   const binStats = entries.map(([index, bucket]) => {
-    const usable = bucket.filter((frame) => ambientFrameUsable(frame, options));
+    const usable = bucket.filter((frame) =>
+      ambientFrameUsable(frame, options, resting)
+    );
     let maxUsableGapMs = 0;
     for (let position = 1; position < usable.length; position += 1) {
       maxUsableGapMs = Math.max(
@@ -645,7 +760,7 @@ function screenBins(
     return { threshold, binsAccepted, lostToGap, lostToSampleCount, lostToSpan };
   });
   const bins = entries.flatMap(([index, bucket]) => {
-    const bin = qualifyBin(index, bucket, options, (reason) => {
+    const bin = qualifyBin(index, bucket, options, resting, (reason) => {
       binRejections[reason] = (binRejections[reason] ?? 0) + 1;
     });
     return bin ? [bin] : [];
@@ -668,6 +783,7 @@ function screenBins(
             rollP95: absAt((pose) => pose.rollDegrees, 0.95)
           }
         : null,
+      restingPose: resting,
       binsConsidered: entries.length,
       binsAccepted: bins.length,
       binRejections,
@@ -1077,6 +1193,9 @@ export function extractAmbientFaceMetrics(
   // outcomes. An outcome carries one value by construction, so a series cannot
   // travel inside it.
   const blinkEvents: BlinkEventRecord[] = [];
+  // Same reference the bin screener uses, so "within measurement limits" on an
+  // event means the same thing it means for a bin.
+  const sessionRestingPose = restingPose(inRange);
   // Ordered, attribution- and geometry-complete frames without the pose gate.
   const tier2Frames = [...inRange]
     .filter(tier2FrameUsable)
@@ -1225,7 +1344,8 @@ export function extractAmbientFaceMetrics(
           tier2Frames,
           record.onsetMs,
           record.offsetMs,
-          options
+          options,
+          sessionRestingPose
         )
       });
     }
@@ -1297,7 +1417,8 @@ export function extractAmbientFaceMetrics(
       tier2Frames,
       event.startMs,
       event.endMs,
-      options
+      options,
+      sessionRestingPose
     )
   }));
 
