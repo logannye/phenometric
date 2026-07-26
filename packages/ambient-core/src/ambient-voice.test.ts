@@ -307,3 +307,48 @@ describe("pause and speech-run events", () => {
     expect(outcome?.evidence.pauseCount).toBeGreaterThan(0);
   });
 });
+
+describe("speech SNR gates pitch, not timing", () => {
+  /** Speech with `failFraction` of its frames scattered below the SNR floor. */
+  function noisyFrames(failFraction: number): AmbientVoiceFrame[] {
+    const stride = Math.max(2, Math.round(1 / failFraction));
+    return ambientVoiceFrames().map((frame, index) =>
+      frame.speechActive && index % stride === 0
+        ? { ...frame, snrDb: 9 }
+        : frame
+    );
+  }
+
+  it("still forms segments when a third of speech frames are noisy", () => {
+    // Measured reality: 32% of speech frames below 15 dB, scattered. Because
+    // eligibleSegments ends a segment on any unusable frame, a surviving
+    // 2-second segment was a 1-in-10^34 event, and three real sessions each
+    // reported zero segments and withheld all seven voice metrics.
+    const result = extractAmbientVoiceMetrics(noisyFrames(0.32), OPTIONS);
+    const timing = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.voice.speech_activity_fraction"
+    );
+    expect(timing?.status).toBe("measured");
+    expect((result.events?.speechRuns ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("keeps noisy frames out of the pitch estimate", () => {
+    // The floor is not abandoned, it is relocated to the measurement it
+    // protects. Pitched duration must fall when frames go below it.
+    const clean = extractAmbientVoiceMetrics(ambientVoiceFrames(), OPTIONS);
+    const noisy = extractAmbientVoiceMetrics(noisyFrames(0.5), OPTIONS);
+    const pitched = (result: typeof clean) =>
+      result.outcomes.find(
+        (outcome) => outcome.code === "ambient.voice.f0.median"
+      )?.evidence.pitchedDurationMs ?? 0;
+    expect(pitched(noisy)).toBeLessThan(pitched(clean));
+  });
+
+  it("withholds pitch entirely when the speech is too noisy to estimate", () => {
+    const result = extractAmbientVoiceMetrics(noisyFrames(0.95), OPTIONS);
+    const f0 = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.voice.f0.median"
+    );
+    expect(f0?.status).toBe("withheld");
+  });
+});
