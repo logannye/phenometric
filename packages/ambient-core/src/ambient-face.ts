@@ -12,6 +12,8 @@ import {
 } from "./expression-events.js";
 import type {
   BlinkEventRecord,
+  DetectedBlink,
+  ExpressionEventRecord,
   SubjectSide
 } from "./kinematic-events.js";
 import {
@@ -37,9 +39,87 @@ export const AMBIENT_FACE_MIN_SAMPLES_PER_BIN = 80;
 export const AMBIENT_FACE_MAX_FRAME_GAP_MS = 200;
 export const AMBIENT_FACE_MIN_BINS = 3;
 export const AMBIENT_FACE_MIN_SPAN_MS = 30_000;
+/*
+ * Pose limits are DEVIATION FROM THE SESSION'S RESTING POSE, not from frontal.
+ *
+ * A laptop camera sits below eye level, so a seated participant reads as
+ * several degrees of constant pitch that no amount of sitting still removes. A
+ * measured session showed a median pitch of 7.4 against a limit of 10 -- half
+ * the session at the ceiling before any head movement at all. Gating on
+ * absolute angle conflates "the camera is mounted low", which is constant and
+ * harmless, with "the subject turned away", which is neither.
+ *
+ * The resting pose is the session median, and how far IT may sit from frontal
+ * is bounded separately below, per axis, because the three rotations do not
+ * bias measurement equally.
+ */
 export const AMBIENT_FACE_MAX_YAW_DEGREES = 7;
 export const AMBIENT_FACE_MAX_PITCH_DEGREES = 10;
 export const AMBIENT_FACE_MAX_ROLL_DEGREES = 5;
+
+/*
+ * How far the resting pose itself may sit from frontal.
+ *
+ * These differ per axis on geometric grounds, not preference:
+ *
+ * YAW is rotation about the vertical axis, so it foreshortens one side of the
+ * face and not the other. A constant yaw offset therefore biases every
+ * left-versus-right measurement this system exists to make. Kept tight.
+ *
+ * PITCH is rotation about the horizontal axis and is symmetric across the
+ * midline: it moves both sides together and leaves asymmetry largely alone.
+ * This is also the axis camera placement actually offsets. Generous.
+ *
+ * ROLL is in-plane, and the coordinate system already cancels it by aligning
+ * its x-axis to the inter-eye line before measuring anything. Generous.
+ */
+export const AMBIENT_FACE_MAX_RESTING_YAW_DEGREES = 10;
+export const AMBIENT_FACE_MAX_RESTING_PITCH_DEGREES = 20;
+export const AMBIENT_FACE_MAX_RESTING_ROLL_DEGREES = 15;
+
+/** The pose a session is measured relative to. */
+export interface RestingPose {
+  yawDegrees: number;
+  pitchDegrees: number;
+  rollDegrees: number;
+}
+
+/**
+ * Session resting pose: the median of each axis across frames carrying one.
+ *
+ * Self-calibrating rather than taken from the calibration step, so it needs no
+ * capture-path or contract change and adapts to how the participant actually
+ * sat. Returns null when it falls outside the resting bounds -- a session spent
+ * genuinely turned away has no usable reference, and measuring deviation from a
+ * bad baseline would silently accept the whole thing.
+ */
+export function restingPose(
+  frames: readonly AmbientFacialFrame[]
+): RestingPose | null {
+  const poses = frames
+    .map((frame) => frame.pose)
+    .filter((pose): pose is NonNullable<typeof pose> => pose !== null)
+    .filter(
+      (pose) =>
+        finite(pose.yawDegrees) &&
+        finite(pose.pitchDegrees) &&
+        finite(pose.rollDegrees)
+    );
+  if (poses.length === 0) return null;
+  const resting = {
+    yawDegrees: median(poses.map((pose) => pose.yawDegrees)),
+    pitchDegrees: median(poses.map((pose) => pose.pitchDegrees)),
+    rollDegrees: median(poses.map((pose) => pose.rollDegrees))
+  };
+  if (
+    Math.abs(resting.yawDegrees) > AMBIENT_FACE_MAX_RESTING_YAW_DEGREES ||
+    Math.abs(resting.pitchDegrees) > AMBIENT_FACE_MAX_RESTING_PITCH_DEGREES ||
+    Math.abs(resting.rollDegrees) > AMBIENT_FACE_MAX_RESTING_ROLL_DEGREES
+  ) {
+    return null;
+  }
+  return resting;
+}
 export const AMBIENT_FACE_MAX_CALIBRATION_SIZE_DELTA = 0.2;
 export const AMBIENT_FACE_MAX_WITHIN_BIN_SIZE_RATIO = 1.15;
 export const AMBIENT_BLINK_MIN_EXPOSURE_MS = 60_000;
@@ -114,6 +194,72 @@ interface BinScreening {
   bins: FacialBin[];
   attributionFailureCount: number;
   qualityFailureCount: number;
+  diagnostics: FaceScreeningDiagnostics;
+}
+
+/**
+ * Why a session measured what it measured, or why it measured nothing.
+ *
+ * Diagnostic only: no metric reads this, and it carries counts and pose
+ * statistics rather than any per-frame series. It exists because a report full
+ * of abstentions currently looks identical whether the camera saw nobody or saw
+ * a face that never held still enough for a bin to qualify -- and those call
+ * for opposite fixes.
+ */
+export interface FaceScreeningDiagnostics {
+  frameCount: number;
+  usableFrameCount: number;
+  /** Frames failing each gate. A frame can fail several, so these overlap. */
+  frameGateFailures: Record<string, number>;
+  /** Absolute pose in degrees across all frames carrying one. */
+  pose: {
+    yawP50: number; yawP95: number;
+    pitchP50: number; pitchP95: number;
+    rollP50: number; rollP95: number;
+  } | null;
+  /**
+   * The pose every frame in this session was judged relative to, or null when
+   * no reference inside the resting bounds existed and gating fell back to
+   * frontal.
+   */
+  restingPose: RestingPose | null;
+  binsConsidered: number;
+  binsAccepted: number;
+  /** First failing check per rejected bin. */
+  binRejections: Record<string, number>;
+  /**
+   * Per bin, how much of it survived the frame gate and what that leaves.
+   *
+   * `maxUsableGapMs` is the largest hole between consecutive USABLE frames --
+   * the gap that would exist if unusable frames were dropped rather than the
+   * whole bin. It is the reason a fractional gate is not obviously a fix:
+   * dropping a burst of bad frames leaves a hole, and the gap rule may simply
+   * become the new binding constraint.
+   */
+  bins: Array<{
+    index: number;
+    frameCount: number;
+    usableFrameCount: number;
+    usableFraction: number;
+    maxUsableGapMs: number;
+    /** Wall-clock extent of the usable frames; the span rule tests this. */
+    usableSpanMs: number;
+  }>;
+  /**
+   * Bins that WOULD qualify at each candidate frame-usability threshold, if the
+   * all-or-nothing rule were replaced by a fractional one.
+   *
+   * Simulates the full consequence, not just the fraction: a bin counts only if
+   * it also keeps enough usable frames and leaves no gap wider than the
+   * existing limit. This is what the threshold should be chosen from.
+   */
+  acceptanceCurve: Array<{
+    threshold: number;
+    binsAccepted: number;
+    lostToGap: number;
+    lostToSampleCount: number;
+    lostToSpan: number;
+  }>;
 }
 
 function finite(value: number): boolean {
@@ -210,25 +356,121 @@ function calibratedSizeUsable(
   );
 }
 
+/**
+ * Every gate a frame failed, empty when it is usable.
+ *
+ * The boolean predicate is derived from this rather than duplicating it, so the
+ * diagnostic view and the measurement path can never disagree about why a frame
+ * was dropped. Without this the extractor rejects frames silently, and a session
+ * that abstains is indistinguishable from one that never saw a face.
+ */
+export function frameGateFailures(
+  frame: AmbientFacialFrame,
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null = null
+): string[] {
+  const reasons: string[] = [];
+  const pose = frame.pose;
+  if (frame.faceCount !== 1) reasons.push("face-count");
+  if (faceTrackSegmentId(frame) === null) reasons.push("no-track-id");
+  if (!evaluateVisualQuality(frame, null).usable) reasons.push("image-quality");
+  if (pose === null) {
+    reasons.push("no-pose");
+  } else {
+    // Deviation from the session's resting pose. A null reference means the
+    // session had none inside the resting bounds, and it falls back to frontal
+    // rather than accepting an arbitrary baseline.
+    const reference = resting ?? {
+      yawDegrees: 0,
+      pitchDegrees: 0,
+      rollDegrees: 0
+    };
+    if (!finite(pose.yawDegrees) ||
+        Math.abs(pose.yawDegrees - reference.yawDegrees) >
+          AMBIENT_FACE_MAX_YAW_DEGREES) {
+      reasons.push("yaw");
+    }
+    if (!finite(pose.pitchDegrees) ||
+        Math.abs(pose.pitchDegrees - reference.pitchDegrees) >
+          AMBIENT_FACE_MAX_PITCH_DEGREES) {
+      reasons.push("pitch");
+    }
+    if (!finite(pose.rollDegrees) ||
+        Math.abs(pose.rollDegrees - reference.rollDegrees) >
+          AMBIENT_FACE_MAX_ROLL_DEGREES) {
+      reasons.push("roll");
+    }
+  }
+  if (!calibratedSizeUsable(frame, options)) reasons.push("face-scale");
+  if (!completeGeometry(frame)) reasons.push("incomplete-geometry");
+  return reasons;
+}
+
 function ambientFrameUsable(
   frame: AmbientFacialFrame,
-  options: AmbientFaceExtractionOptions
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null = null
 ): boolean {
-  const pose = frame.pose;
-  return (
-    frame.faceCount === 1 &&
-    faceTrackSegmentId(frame) !== null &&
-    evaluateVisualQuality(frame, null).usable &&
-    pose !== null &&
-    finite(pose.yawDegrees) &&
-    Math.abs(pose.yawDegrees) <= AMBIENT_FACE_MAX_YAW_DEGREES &&
-    finite(pose.pitchDegrees) &&
-    Math.abs(pose.pitchDegrees) <= AMBIENT_FACE_MAX_PITCH_DEGREES &&
-    finite(pose.rollDegrees) &&
-    Math.abs(pose.rollDegrees) <= AMBIENT_FACE_MAX_ROLL_DEGREES &&
-    calibratedSizeUsable(frame, options) &&
-    completeGeometry(frame)
+  return frameGateFailures(frame, options, resting).length === 0;
+}
+
+/**
+ * Whether a frame can support Tier-2 event detection.
+ *
+ * Deliberately looser than {@link ambientFrameUsable}: it drops the pose and
+ * calibrated-scale gates and keeps attribution, image quality, and geometry
+ * completeness.
+ *
+ * Those pose limits exist so that CROSS-FRAME GEOMETRIC COMPARISON stays valid
+ * -- comparing one corner against the other, measuring asymmetry. A blink is
+ * not that. It is a relative aperture change within one eye over about 150 ms,
+ * during which the head pose is essentially constant, so it survives a 15 degree
+ * turn intact. Holding event detection to a standard designed for a different
+ * measurement cost a real 70-second session every blink and expression it
+ * contained.
+ *
+ * Events carry {@link BlinkEventRecord.poseWithinMeasurementLimits} so a
+ * consumer that DOES need geometric comparability can still filter to the
+ * stricter set.
+ */
+function tier2FrameUsable(frame: AmbientFacialFrame): boolean {
+  if (
+    frame.faceCount !== 1 ||
+    faceTrackSegmentId(frame) === null ||
+    !completeGeometry(frame)
+  ) {
+    return false;
+  }
+  // The image-quality assessment carries a SECOND pose gate of its own, looser
+  // than the extractor's but still absolute. Reading only `.usable` here made
+  // the decoupling incomplete: events still vanished once the head passed 15
+  // degrees, for the same reason and with the same consequence. Pose is
+  // excluded explicitly; everything else -- lighting, sharpness, framing -- is
+  // still required, because those DO corrupt the landmarks a blink is measured
+  // from.
+  return evaluateVisualQuality(frame, null).reasonCodes.every(
+    (reason) => reason === "pose-out-of-range"
   );
+}
+
+/** Whether every frame spanning an event stayed inside the Tier-3 pose limits. */
+function poseWithinLimits(
+  frames: readonly AmbientFacialFrame[],
+  startMs: number,
+  endMs: number,
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null
+): boolean {
+  const spanning = frames.filter(
+    (frame) => frame.tMs >= startMs && frame.tMs <= endMs
+  );
+  if (spanning.length === 0) return false;
+  return spanning.every((frame) => {
+    const failures = frameGateFailures(frame, options, resting);
+    return !failures.some((reason) =>
+      reason === "yaw" || reason === "pitch" || reason === "roll"
+    );
+  });
 }
 
 function mouthWidth(frame: AmbientFacialFrame): number {
@@ -313,11 +555,39 @@ function binValues(
 
 function qualifyBin(
   index: number,
-  frames: AmbientFacialFrame[],
-  options: AmbientFaceExtractionOptions
+  candidateFrames: readonly AmbientFacialFrame[],
+  options: AmbientFaceExtractionOptions,
+  resting: RestingPose | null,
+  onReject?: (reason: string) => void
 ): FacialBin | null {
-  if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) return null;
-  if (!frames.every((frame) => ambientFrameUsable(frame, options))) return null;
+  const reject = (reason: string): null => {
+    onReject?.(reason);
+    return null;
+  };
+  /*
+   * Unusable frames are dropped; the bin is not.
+   *
+   * This used to require EVERY frame to pass, which in real capture discarded
+   * 82% of a session's bins to exclude 22% of its frames -- one glance away
+   * costing the surrounding five seconds. Measured across three real sessions,
+   * it was the single reason nothing was ever measurable.
+   *
+   * No new threshold replaces it, because the pack already carries one:
+   * `minimumDataPerBinMs` of 4000 in a 5000 ms bin IS an 80% requirement. The
+   * all-or-nothing rule was redundant with it and far stricter. Dropping bad
+   * frames and letting the published requirement do its job makes the code
+   * enforce what the pack always said.
+   *
+   * Every retained frame is individually pose-valid, so the geometry stays
+   * sound -- the bin simply rests on less of it, which is exactly what
+   * `minimumDataPerBinMs` and `minimumSamplesPerBin` exist to bound.
+   */
+  const frames = candidateFrames.filter((frame) =>
+    ambientFrameUsable(frame, options, resting)
+  );
+  if (frames.length < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
+    return reject("too-few-usable-frames");
+  }
   const processorRefs = new Set(frames.map((frame) => frame.processorRef));
   const trackSegmentIds = new Set(frames.map(faceTrackSegmentId));
   const epochs = new Set(frames.map((frame) => frame.captureEpoch));
@@ -326,7 +596,7 @@ function qualifyBin(
     trackSegmentIds.size !== 1 ||
     epochs.size !== 1
   ) {
-    return null;
+    return reject("mixed-provenance");
   }
   const gaps = frames
     .slice(1)
@@ -336,21 +606,29 @@ function qualifyBin(
       (gap) => gap <= 0 || gap > AMBIENT_FACE_MAX_FRAME_GAP_MS
     )
   ) {
-    return null;
+    return reject("frame-gap");
   }
   const actualSpanMs = frames.at(-1)!.tMs - frames[0].tMs;
   const stepMs = nominalStepMs(frames);
+  /*
+   * How much of this bin was actually ANALYZED, not how much time elapsed
+   * across it.
+   *
+   * Summing raw inter-frame gaps counted a hole as data: two frames 200 ms
+   * apart contributed 200 ms while carrying two samples. That was harmless
+   * while the frame gate guaranteed no holes and wrong the moment it stopped.
+   * Each retained frame now represents one nominal step of observation, which
+   * is what `minimumDataPerBinMs` is checked against.
+   */
   const durationMs = Math.min(
     AMBIENT_FACE_BIN_MS,
-    Math.round(
-      (gaps.reduce((total, gap) => total + gap, 0) + stepMs) * 1_000
-    ) / 1_000
+    Math.round(frames.length * stepMs * 1_000) / 1_000
   );
   if (
     actualSpanMs < AMBIENT_FACE_MIN_BIN_SPAN_MS ||
     durationMs < AMBIENT_FACE_MIN_BIN_DATA_MS
   ) {
-    return null;
+    return reject("short-bin");
   }
   const sizes = frames.map((frame) =>
     Math.sqrt(
@@ -364,7 +642,7 @@ function qualifyBin(
     sizeP10 <= 0 ||
     sizeP90 / sizeP10 > AMBIENT_FACE_MAX_WITHIN_BIN_SIZE_RATIO
   ) {
-    return null;
+    return reject("scale-drift");
   }
   const startMs = options.sessionStartedAtMs + index * AMBIENT_FACE_BIN_MS;
   const processorRef = frames[0].processorRef;
@@ -397,13 +675,16 @@ function screenBins(
   options: AmbientFaceExtractionOptions
 ): BinScreening {
   const buckets = new Map<number, AmbientFacialFrame[]>();
+  // One reference for the whole session, so every bin is judged against the
+  // same baseline rather than drifting with local head position.
+  const resting = restingPose(frames);
   let attributionFailureCount = 0;
   let qualityFailureCount = 0;
   for (const frame of frames) {
     if (frame.faceCount !== 1 || faceTrackSegmentId(frame) === null) {
       attributionFailureCount += 1;
     }
-    if (!ambientFrameUsable(frame, options)) qualityFailureCount += 1;
+    if (!ambientFrameUsable(frame, options, resting)) qualityFailureCount += 1;
     const index = Math.floor(
       (frame.tMs - options.sessionStartedAtMs) / AMBIENT_FACE_BIN_MS
     );
@@ -411,13 +692,105 @@ function screenBins(
     bucket.push(frame);
     buckets.set(index, bucket);
   }
-  const bins = [...buckets.entries()]
-    .sort(([left], [right]) => left - right)
-    .flatMap(([index, bucket]) => {
-      const bin = qualifyBin(index, bucket, options);
-      return bin ? [bin] : [];
+  const gateFailures: Record<string, number> = {};
+  let usableFrameCount = 0;
+  for (const frame of frames) {
+    const failures = frameGateFailures(frame, options, resting);
+    if (failures.length === 0) usableFrameCount += 1;
+    for (const reason of failures) {
+      gateFailures[reason] = (gateFailures[reason] ?? 0) + 1;
+    }
+  }
+  const poses = frames
+    .map((frame) => frame.pose)
+    .filter((pose): pose is NonNullable<typeof pose> => pose !== null);
+  const absAt = (pick: (p: NonNullable<AmbientFacialFrame["pose"]>) => number, q: number) =>
+    percentile(poses.map((pose) => Math.abs(pick(pose))), q);
+
+  const binRejections: Record<string, number> = {};
+  const entries = [...buckets.entries()].sort(([left], [right]) => left - right);
+
+  const binStats = entries.map(([index, bucket]) => {
+    const usable = bucket.filter((frame) =>
+      ambientFrameUsable(frame, options, resting)
+    );
+    let maxUsableGapMs = 0;
+    for (let position = 1; position < usable.length; position += 1) {
+      maxUsableGapMs = Math.max(
+        maxUsableGapMs,
+        usable[position].tMs - usable[position - 1].tMs
+      );
+    }
+    return {
+      index,
+      frameCount: bucket.length,
+      usableFrameCount: usable.length,
+      usableFraction:
+        bucket.length > 0 ? usable.length / bucket.length : 0,
+      maxUsableGapMs,
+      usableSpanMs:
+        usable.length > 1 ? usable.at(-1)!.tMs - usable[0].tMs : 0
+    };
+  });
+
+  const acceptanceCurve = [1, 0.98, 0.95, 0.9, 0.85, 0.8].map((threshold) => {
+    let binsAccepted = 0;
+    let lostToGap = 0;
+    let lostToSampleCount = 0;
+    let lostToSpan = 0;
+    for (const bin of binStats) {
+      if (bin.usableFraction < threshold) continue;
+      if (bin.usableFrameCount < AMBIENT_FACE_MIN_SAMPLES_PER_BIN) {
+        lostToSampleCount += 1;
+        continue;
+      }
+      if (bin.maxUsableGapMs > AMBIENT_FACE_MAX_FRAME_GAP_MS) {
+        lostToGap += 1;
+        continue;
+      }
+      // Omitting this made an earlier projection optimistic: losing frames from
+      // a bin EDGE shortens the usable span one-for-one, and the span rule is
+      // far tighter than the data rule -- 200 ms of slack against 1000 ms.
+      if (bin.usableSpanMs < AMBIENT_FACE_MIN_BIN_SPAN_MS) {
+        lostToSpan += 1;
+        continue;
+      }
+      binsAccepted += 1;
+    }
+    return { threshold, binsAccepted, lostToGap, lostToSampleCount, lostToSpan };
+  });
+  const bins = entries.flatMap(([index, bucket]) => {
+    const bin = qualifyBin(index, bucket, options, resting, (reason) => {
+      binRejections[reason] = (binRejections[reason] ?? 0) + 1;
     });
-  return { bins, attributionFailureCount, qualityFailureCount };
+    return bin ? [bin] : [];
+  });
+  return {
+    bins,
+    attributionFailureCount,
+    qualityFailureCount,
+    diagnostics: {
+      frameCount: frames.length,
+      usableFrameCount,
+      frameGateFailures: gateFailures,
+      pose: poses.length > 0
+        ? {
+            yawP50: absAt((pose) => pose.yawDegrees, 0.5),
+            yawP95: absAt((pose) => pose.yawDegrees, 0.95),
+            pitchP50: absAt((pose) => pose.pitchDegrees, 0.5),
+            pitchP95: absAt((pose) => pose.pitchDegrees, 0.95),
+            rollP50: absAt((pose) => pose.rollDegrees, 0.5),
+            rollP95: absAt((pose) => pose.rollDegrees, 0.95)
+          }
+        : null,
+      restingPose: resting,
+      binsConsidered: entries.length,
+      binsAccepted: bins.length,
+      binRejections,
+      bins: binStats,
+      acceptanceCurve
+    }
+  };
 }
 
 function evidenceFor(
@@ -614,8 +987,19 @@ function p95Gaps(bins: readonly FacialBin[]): number {
   return gaps.length > 0 ? percentile(gaps, 0.95) : Number.POSITIVE_INFINITY;
 }
 
+/**
+ * The detector needs only an ordered group of frames and an index to attribute
+ * results to. A qualifying bin satisfies this, and so does the raw frame stream
+ * wrapped as a single group -- which is what lets Tier-2 extraction run without
+ * inheriting the pose gating a bin implies.
+ */
+interface FrameGroup {
+  index: number;
+  frames: AmbientFacialFrame[];
+}
+
 /** One eye's blink, plus the bin it peaked in so per-bin rates survive. */
-interface BinnedBlink extends BlinkEventRecord {
+interface BinnedBlink extends DetectedBlink {
   binIndex: number;
 }
 
@@ -633,7 +1017,7 @@ interface BinnedBlink extends BlinkEventRecord {
  * waveform, three findings, none of them recoverable from a count.
  */
 function detectBlinksForEye(
-  bins: readonly FacialBin[],
+  bins: readonly FrameGroup[],
   side: SubjectSide,
   apertureOf: (frame: AmbientFacialFrame) => number
 ): BinnedBlink[] {
@@ -752,7 +1136,7 @@ function detectBlinksForEye(
 }
 
 /** Every blink from both eyes, ordered by the moment of maximum closure. */
-function detectBlinkEvents(bins: readonly FacialBin[]): BinnedBlink[] {
+function detectBlinkEvents(bins: readonly FrameGroup[]): BinnedBlink[] {
   return [
     ...detectBlinksForEye(bins, "left", (frame) => frame.eyeAperture!.left),
     ...detectBlinksForEye(bins, "right", (frame) => frame.eyeAperture!.right)
@@ -767,7 +1151,7 @@ function detectBlinkEvents(bins: readonly FacialBin[]): BinnedBlink[] {
  * closure now exists as an event without inflating that count.
  */
 function detectBlinks(
-  bins: readonly FacialBin[]
+  bins: readonly FrameGroup[]
 ): { count: number; perBinCounts: number[]; events: BinnedBlink[] } {
   const events = detectBlinkEvents(bins);
   const perBinCounts = bins.map(() => 0);
@@ -809,6 +1193,13 @@ export function extractAmbientFaceMetrics(
   // outcomes. An outcome carries one value by construction, so a series cannot
   // travel inside it.
   const blinkEvents: BlinkEventRecord[] = [];
+  // Same reference the bin screener uses, so "within measurement limits" on an
+  // event means the same thing it means for a bin.
+  const sessionRestingPose = restingPose(inRange);
+  // Ordered, attribution- and geometry-complete frames without the pose gate.
+  const tier2Frames = [...inRange]
+    .filter(tier2FrameUsable)
+    .sort((left, right) => left.tMs - right.tMs);
   const screening = screenBins(inRange, options);
   const evidence = evidenceFor(inRange, screening.bins);
   const failure = commonFailure(screening, options);
@@ -918,6 +1309,48 @@ export function extractAmbientFaceMetrics(
       detail: "Bilateral blink rate requires a P95 frame gap no greater than 75 ms."
     };
   }
+  /*
+   * Detection runs whenever there are bins to run it on, independent of whether
+   * the blink METRIC publishes.
+   *
+   * This used to sit inside the else branch below, so a session that failed the
+   * 60-second exposure gate discarded every blink it had actually observed. A
+   * 54-second session with a face in frame throughout reported zero blinks --
+   * not because none occurred, but because a publication threshold suppressed
+   * the extraction feeding it. Tier 2 exists precisely so an abstaining metric
+   * still leaves its observations behind.
+   */
+  const blinks =
+    screening.bins.length > 0
+      ? detectBlinks(screening.bins)
+      : { count: 0, perBinCounts: [] as number[], events: [] as BinnedBlink[] };
+
+  /*
+   * Tier-2 events come from the LOOSE stream, not the qualifying bins.
+   *
+   * The published blink rate above stays bin-derived and unchanged: it is
+   * explicitly a rate over pose-qualified windows. These events answer a
+   * different question -- what did the session actually contain -- and a
+   * session whose bins all failed the pose gate still contained blinks.
+   */
+  if (tier2Frames.length > 0) {
+    for (const event of detectBlinkEvents([
+      { index: 0, frames: tier2Frames }
+    ])) {
+      const { binIndex: _binIndex, ...record } = event;
+      blinkEvents.push({
+        ...record,
+        poseWithinMeasurementLimits: poseWithinLimits(
+          tier2Frames,
+          record.onsetMs,
+          record.offsetMs,
+          options,
+          sessionRestingPose
+        )
+      });
+    }
+  }
+
   if (blinkFailure) {
     outcomes.push(
       withheldOutcome(
@@ -929,10 +1362,6 @@ export function extractAmbientFaceMetrics(
       )
     );
   } else {
-    const blinks = detectBlinks(screening.bins);
-    blinkEvents.push(
-      ...blinks.events.map(({ binIndex: _binIndex, ...event }) => event)
-    );
     const blinkEvidence = evidenceFor(inRange, screening.bins, {
       frontalExposureMs,
       blinkCount: blinks.count
@@ -963,6 +1392,35 @@ export function extractAmbientFaceMetrics(
           screening.bins.reduce((total, bin) => total + bin.durationMs, 0)
         )
       : null;
+
+  /*
+   * Expressions are detected on the loose stream for the same reason blinks are:
+   * a mouth movement is recoverable at a head angle that would invalidate a
+   * left-versus-right comparison of it. The per-side excursion METRICS below
+   * still come from the qualifying bins; these events are the record of what
+   * the session contained.
+   */
+  const looseExpressions =
+    tier2Frames.length > 0
+      ? summarizeExpressions(
+          tier2Frames,
+          tier2Frames.length > 1
+            ? tier2Frames.at(-1)!.tMs - tier2Frames[0].tMs
+            : 0
+        )
+      : null;
+  const expressionEvents: ExpressionEventRecord[] = (
+    looseExpressions?.events ?? []
+  ).map((event) => ({
+    ...event,
+    poseWithinMeasurementLimits: poseWithinLimits(
+      tier2Frames,
+      event.startMs,
+      event.endMs,
+      options,
+      sessionRestingPose
+    )
+  }));
 
   const expressionEvidence = evidenceFor(inRange, screening.bins, {
     expressionEventCount: expressionSummary?.eventCount,
@@ -1180,7 +1638,8 @@ export function extractAmbientFaceMetrics(
       blinks: blinkEvents,
       // Already fully computed for the summary and previously reduced to two
       // integers before anything could see them.
-      expressions: expressionSummary?.events ?? []
-    }
+      expressions: expressionEvents
+    },
+    diagnostics: screening.diagnostics
   };
 }

@@ -112,8 +112,13 @@ export {
   type ExpressionEvent,
   type ExpressionSummary
 } from "./expression-events.js";
+export { frameGateFailures } from "./ambient-face.js";
+export type { FaceScreeningDiagnostics } from "./ambient-face.js";
+export type { VoiceScreeningDiagnostics } from "./ambient-voice.js";
 export type {
   BlinkEventRecord,
+  DetectedBlink,
+  DetectedExpression,
   ExpressionEventRecord,
   PauseEventRecord,
   PauseKind,

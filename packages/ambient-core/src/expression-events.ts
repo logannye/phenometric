@@ -1,4 +1,4 @@
-import type { ExpressionEventRecord } from "./kinematic-events.js";
+import type { DetectedExpression } from "./kinematic-events.js";
 /**
  * Spontaneous facial expression events.
  *
@@ -79,7 +79,7 @@ export interface ExpressionBaseline {
  * because the detector's callers predate the record type; the fields are the
  * same set.
  */
-export type ExpressionEvent = ExpressionEventRecord;
+export type ExpressionEvent = DetectedExpression;
 
 function finite(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value);

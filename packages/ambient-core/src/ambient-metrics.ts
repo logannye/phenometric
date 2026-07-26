@@ -40,6 +40,13 @@ export function finalizeAmbientMetrics(
   return {
     outcomes,
     ignoredFrameCount:
-      voice.ignoredFrameCount + face.ignoredFrameCount
+      voice.ignoredFrameCount + face.ignoredFrameCount,
+    events: {
+      blinks: face.events?.blinks ?? [],
+      expressions: face.events?.expressions ?? [],
+      pauses: voice.events?.pauses ?? [],
+      speechRuns: voice.events?.speechRuns ?? []
+    },
+    diagnostics: { face: face.diagnostics, voice: voice.diagnostics }
   };
 }

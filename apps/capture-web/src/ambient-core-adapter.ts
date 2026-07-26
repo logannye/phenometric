@@ -1,5 +1,7 @@
 import {
   finalizeAmbientMetrics,
+  type FaceScreeningDiagnostics,
+  type VoiceScreeningDiagnostics,
   type AmbientFaceCalibration,
   type AmbientFacialFrame,
   type AmbientMetricEvidence,
@@ -130,6 +132,161 @@ function primaryTrack(outcome: AmbientMetricOutcome): string {
  * Counting only the metric's own events keeps the number honest and keeps
  * each gate answerable by its own evidence.
  */
+/**
+ * Prints why the session measured what it measured.
+ *
+ * A report full of abstentions looks identical whether the camera saw nobody or
+ * saw a face that never held still long enough for a bin to qualify, and those
+ * call for opposite fixes. Console only: no storage, no export, no contract
+ * surface. Counts and pose percentiles, never a per-frame series.
+ */
+function reportCaptureDiagnostics(
+  extraction: { diagnostics?: unknown; events?: unknown },
+  faceFrameCount: number
+): void {
+  const all = extraction.diagnostics as
+    | { face?: FaceScreeningDiagnostics; voice?: VoiceScreeningDiagnostics }
+    | undefined;
+  const diagnostics = all?.face;
+  const voice = all?.voice;
+  if (!diagnostics) return;
+  const events = extraction.events as
+    | { blinks?: readonly unknown[]; expressions?: readonly unknown[];
+        pauses?: readonly unknown[]; speechRuns?: readonly unknown[] }
+    | undefined;
+
+  const pct = (part: number, whole: number) =>
+    whole > 0 ? `${((part / whole) * 100).toFixed(1)}%` : "n/a";
+  const lines: string[] = [
+    `frames delivered to extractor: ${faceFrameCount}`,
+    `frames passing every gate:     ${diagnostics.usableFrameCount} (${pct(diagnostics.usableFrameCount, diagnostics.frameCount)})`,
+    `bins accepted:                 ${diagnostics.binsAccepted} of ${diagnostics.binsConsidered}`
+  ];
+  const pose = diagnostics.pose;
+  if (pose) {
+    lines.push(
+      "absolute pose in degrees (limits yaw 7 / pitch 10 / roll 5):",
+      `  yaw    p50 ${pose.yawP50.toFixed(1)}   p95 ${pose.yawP95.toFixed(1)}`,
+      `  pitch  p50 ${pose.pitchP50.toFixed(1)}   p95 ${pose.pitchP95.toFixed(1)}`,
+      `  roll   p50 ${pose.rollP50.toFixed(1)}   p95 ${pose.rollP95.toFixed(1)}`
+    );
+  }
+  const gates = Object.entries(diagnostics.frameGateFailures)
+    .sort(([, a], [, b]) => b - a);
+  lines.push(
+    gates.length === 0
+      ? "no frame failed any gate"
+      : "frames failing each gate (one frame can fail several):"
+  );
+  for (const [reason, count] of gates) {
+    lines.push(`  ${reason.padEnd(20)} ${String(count).padStart(6)}  ${pct(count, diagnostics.frameCount)}`);
+  }
+  const rejections = Object.entries(diagnostics.binRejections)
+    .sort(([, a], [, b]) => b - a);
+  lines.push(
+    rejections.length === 0
+      ? "no bin was rejected"
+      : "bin rejections by first failing check:"
+  );
+  for (const [reason, count] of rejections) {
+    lines.push(`  ${reason.padEnd(20)} ${String(count).padStart(6)}`);
+  }
+  const curve = diagnostics.acceptanceCurve ?? [];
+  if (curve.length > 0) {
+    lines.push(
+      "if the all-or-nothing frame gate became fractional:",
+      "  threshold   bins   lost to gap   lost to span   lost to samples"
+    );
+    for (const point of curve) {
+      lines.push(
+        `  ${point.threshold.toFixed(2).padStart(8)}` +
+          `${String(point.binsAccepted).padStart(7)}` +
+          `${String(point.lostToGap).padStart(14)}` +
+          `${String(point.lostToSpan ?? 0).padStart(15)}` +
+          `${String(point.lostToSampleCount).padStart(17)}`
+      );
+    }
+  }
+  const perBin = diagnostics.bins ?? [];
+  if (perBin.length > 0) {
+    lines.push("per bin: usable fraction / largest gap between usable frames:");
+    for (const bin of perBin) {
+      lines.push(
+        `  bin ${String(bin.index).padStart(3)}  ` +
+          `${(bin.usableFraction * 100).toFixed(1).padStart(5)}%  ` +
+          `${String(bin.usableFrameCount).padStart(4)}/${String(bin.frameCount).padEnd(4)}  ` +
+          `gap ${bin.maxUsableGapMs.toFixed(0).padStart(5)} ms  ` +
+          `span ${(bin.usableSpanMs ?? 0).toFixed(0).padStart(5)} ms`
+      );
+    }
+  }
+  if (voice) {
+    const req = voice.requirements;
+    lines.push(
+      "voice lane:",
+      `  frames ${voice.frameCount}, usable ${voice.usableFrameCount}, ` +
+        `speech-active ${voice.speechActiveFrameCount}, periodic ${voice.periodicFrameCount}`,
+      `  segments ${voice.segmentsAccepted} (needs ${req.minimumSegments})`,
+      `  eligible ${(voice.eligibleDurationMs / 1000).toFixed(1)}s ` +
+        `(needs ${(req.minimumEligibleSpanMs / 1000).toFixed(0)}s), ` +
+        `active speech ${(voice.activeSpeechMs / 1000).toFixed(1)}s ` +
+        `(needs ${(req.minimumActiveSpeechMs / 1000).toFixed(0)}s)`
+    );
+    const vg = Object.entries(voice.frameGateFailures).sort(([, a], [, b]) => b - a);
+    if (vg.length > 0) {
+      lines.push("  frames failing each voice gate:");
+      for (const [reason, count] of vg) {
+        lines.push(`    ${reason.padEnd(22)} ${String(count).padStart(6)}`);
+      }
+    }
+  }
+  lines.push(
+    "tier-2 events:",
+    `  blinks       ${events?.blinks?.length ?? 0}`,
+    `  expressions  ${events?.expressions?.length ?? 0}`,
+    `  pauses       ${events?.pauses?.length ?? 0}`,
+    `  speech runs  ${events?.speechRuns?.length ?? 0}`
+  );
+  const report = `PhenoMetrix capture diagnostics\n${lines.join("\n")}`;
+  // eslint-disable-next-line no-console
+  console.log(report);
+  publishDiagnosticsReport(report);
+}
+
+/**
+ * Makes the diagnostics copyable from the finish screen.
+ *
+ * Calibration is an iterate-and-rerun loop, and console-only output made every
+ * round cost a hand-copy or the whole session. Clipboard on an explicit click
+ * is the same act as selecting the text by hand: no storage, no file, no
+ * network, and nothing retained after the page closes.
+ */
+function publishDiagnosticsReport(report: string): void {
+  // The adapter is exercised headlessly in unit tests, where there is no DOM
+  // and no clipboard. Diagnostics are a browser affordance, not part of what
+  // this function computes.
+  if (typeof document === "undefined") return;
+  const button = document.querySelector<HTMLButtonElement>(
+    "#copy-diagnostics"
+  );
+  if (!button || typeof navigator === "undefined" || !navigator.clipboard) {
+    return;
+  }
+  button.hidden = false;
+  button.onclick = () => {
+    void navigator.clipboard
+      .writeText(report)
+      .then(() => {
+        button.textContent = "Diagnostics copied";
+      })
+      .catch(() => {
+        // Clipboard permission can be refused; say so rather than appearing to
+        // have worked.
+        button.textContent = "Copy failed - select the console output";
+      });
+  };
+}
+
 function relevantEventCount(
   code: MetricCode,
   evidence: AmbientMetricEvidence
@@ -456,6 +613,8 @@ export function buildAmbientObservation(
       calibration: input.faceCalibration
     }
   });
+
+  reportCaptureDiagnostics(extraction, input.faceFrames.length);
   const artifacts = extraction.outcomes.map((outcome) =>
     outcomeArtifacts(outcome, input)
   );

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 const dist = resolve(
   fileURLToPath(new URL("../dist", import.meta.url))
 );
-const mount = "/phenometric/";
+const mount = "/phenometrix/";
 const contentTypes: Record<string, string> = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",

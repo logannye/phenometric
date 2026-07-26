@@ -256,6 +256,11 @@ export interface AmbientExtractionResult<
    * and found nothing, which is a different statement.
    */
   events?: Partial<SessionEventRecords>;
+  /**
+   * Why this extractor measured what it measured. Diagnostic only; no metric,
+   * outcome, or report reads it.
+   */
+  diagnostics?: unknown;
 }
 
 export interface AmbientSessionExtractionInput {

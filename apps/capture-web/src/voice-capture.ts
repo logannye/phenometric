@@ -63,6 +63,17 @@ export async function startVoiceCapturePipeline(
     options.audioContext.createMediaStreamSource(options.stream);
   const worklet = new AudioWorkletNode(
     options.audioContext,
+    /*
+     * Deliberately NOT renamed with the rest of PhenoMetrix.
+     *
+     * This is a runtime registration identifier, the same category as the
+     * "phenometric.<name>.vN" schema strings that were left alone for the same
+     * reason. Worse, the worklet is served from public/ at a fixed unhashed
+     * URL, so browsers cache it hard: a stale copy registers the old name while
+     * a fresh bundle asks for the new one, AudioWorkletNode throws, and the
+     * voice lane dies silently -- live telemetry simply stops. Renaming it was
+     * cosmetic and cost exactly that.
+     */
     "phenometric-voice-capture",
     {
       numberOfInputs: 1,

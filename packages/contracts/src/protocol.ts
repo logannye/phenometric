@@ -122,9 +122,25 @@ export const CaptureQualityPolicyV1Schema = z
         minimumSamplesPerBin: z.literal(80),
         minimumBinSpanMs: z.literal(4_800),
         maximumFrameGapMs: z.literal(200),
-        maximumAbsoluteYawDegrees: z.literal(7),
-        maximumAbsolutePitchDegrees: z.literal(10),
-        maximumAbsoluteRollDegrees: z.literal(5),
+        /*
+         * Pose limits are DEVIATION from the session's resting pose, not from
+         * frontal. A camera mounted below eye level reads as constant pitch
+         * that no amount of sitting still removes, and gating on absolute angle
+         * conflated that with the subject turning away.
+         *
+         * The resting bounds below cap how far that reference may itself sit
+         * from frontal, and differ per axis on geometric grounds: yaw
+         * foreshortens one side of the face and so biases every left-versus-
+         * right measurement; pitch is symmetric across the midline; roll is
+         * already cancelled by aligning the coordinate x-axis to the inter-eye
+         * line.
+         */
+        maximumYawDeviationDegrees: z.literal(7),
+        maximumPitchDeviationDegrees: z.literal(10),
+        maximumRollDeviationDegrees: z.literal(5),
+        maximumRestingYawDegrees: z.literal(10),
+        maximumRestingPitchDegrees: z.literal(20),
+        maximumRestingRollDegrees: z.literal(15),
         maximumCalibrationScaleDeviation: z.literal(0.2),
         maximumWithinBinScaleRatio: z.literal(1.15),
         minimumBins: z.literal(3),

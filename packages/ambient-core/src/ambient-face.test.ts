@@ -218,9 +218,17 @@ describe("extractAmbientFaceMetrics", () => {
   });
 
   it("rejects bins beyond strict ambient pose, gap, and sample thresholds", () => {
+    // Pose limits measure DEVIATION from the session's resting pose, so a
+    // constant offset no longer rejects anything -- that is the laptop-camera
+    // case, and treating it as head movement was the defect. Rejection now
+    // requires the head to actually move relative to how it sat.
     const pose = extractAmbientFaceMetrics(
-      ambientFaceFrames(30_000, 30, () => ({
-        pose: { yawDegrees: 7.001, pitchDegrees: 0, rollDegrees: 0 }
+      ambientFaceFrames(30_000, 30, (frame, index) => ({
+        pose: {
+          yawDegrees: index % 2 === 0 ? 0 : 14.001,
+          pitchDegrees: 0,
+          rollDegrees: 0
+        }
       })),
       OPTIONS
     );
@@ -473,5 +481,146 @@ describe("blink events", () => {
     expect(left.length).toBeGreaterThan(0);
     expect(right.length).toBeGreaterThan(0);
     expect(left[0].depth).toBeLessThan(right[0].depth);
+  });
+});
+
+describe("tier-2 events survive a withheld metric", () => {
+  it("extracts blinks from a session too short for the blink metric", () => {
+    // Regression from a real 54-second session: the blink metric requires 60 s
+    // of frontal exposure, and detection sat inside the branch that only ran
+    // when that gate passed. Every blink actually observed was discarded
+    // because a PUBLICATION threshold suppressed the EXTRACTION beneath it.
+    // Tier 2 exists so an abstaining metric still leaves its observations.
+    const frames = ambientFaceFrames(40_000);
+    const result = extractAmbientFaceMetrics(frames, OPTIONS);
+
+    const rate = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.blink_rate.bilateral"
+    );
+    expect(rate?.status).toBe("withheld");
+    if (rate?.status === "withheld") {
+      expect(rate.reasonCode).toBe("insufficient-exposure");
+    }
+
+    // The metric abstains; the events do not vanish with it.
+    expect((result.events?.blinks ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("reports no blinks rather than throwing when nothing qualified", () => {
+    // No bins at all is a different statement from no blinks, and it must not
+    // reach the detector's percentile of an empty set.
+    const result = extractAmbientFaceMetrics([], OPTIONS);
+    expect(result.events?.blinks).toEqual([]);
+  });
+});
+
+describe("tier-2 events survive a session no bin qualifies", () => {
+  /** Blinking normally, but pitched past the 10-degree limit throughout. */
+  function pitchedAwayFrames(): AmbientFacialFrame[] {
+    // Yaw beyond the RESTING bound, so the session has no admissible reference
+    // and gating falls back to frontal -- every frame then fails. A constant
+    // pitch offset would no longer do this, because that is precisely the
+    // camera-placement case the resting pose now absorbs.
+    return ambientFaceFrames(70_000, 30, () => ({
+      pose: { yawDegrees: 25, pitchDegrees: 2, rollDegrees: 2 }
+    }));
+  }
+
+  it("records blinks when every bin fails the pose gate", () => {
+    // Reproduces a real 70-second session: a face in frame the whole time, a
+    // systematic pose offset from a low-mounted camera, 0 of 14 bins accepted,
+    // and consequently not one blink recorded. Detection had been reading the
+    // qualifying bins, so it inherited a gate built for cross-frame geometric
+    // comparison -- a standard a blink does not need.
+    const result = extractAmbientFaceMetrics(pitchedAwayFrames(), OPTIONS);
+
+    expect(
+      result.outcomes.every((outcome) => outcome.status === "withheld")
+    ).toBe(true);
+    expect((result.events?.blinks ?? []).length).toBeGreaterThan(0);
+  });
+
+  it("marks those events as outside the measurement pose limits", () => {
+    // The events exist, and they say plainly that a left-versus-right
+    // comparison of them would not be trustworthy. Rate and timing can use
+    // them; asymmetry should not.
+    const result = extractAmbientFaceMetrics(pitchedAwayFrames(), OPTIONS);
+    const blinks = result.events?.blinks ?? [];
+    expect(blinks.length).toBeGreaterThan(0);
+    expect(
+      blinks.every((blink) => blink.poseWithinMeasurementLimits === false)
+    ).toBe(true);
+  });
+
+  it("flags events as within limits when the pose is good", () => {
+    const result = extractAmbientFaceMetrics(ambientFaceFrames(), OPTIONS);
+    const blinks = result.events?.blinks ?? [];
+    expect(blinks.length).toBeGreaterThan(0);
+    expect(
+      blinks.every((blink) => blink.poseWithinMeasurementLimits === true)
+    ).toBe(true);
+  });
+});
+
+describe("bins survive brief pose excursions", () => {
+  /**
+   * A session where the head leaves the pose limits for a burst in each bin.
+   * `badFramesPerBin` out of 150 are pushed past the yaw limit, contiguously,
+   * so the excursion looks like a real glance away rather than noise.
+   */
+  function withExcursions(badFramesPerBin: number): AmbientFacialFrame[] {
+    // Scattered rather than contiguous, and never at a bin edge. A contiguous
+    // edge loss shortens the usable SPAN one-for-one, and the span rule allows
+    // only 200 ms of slack against the data rule's 1000 ms -- so an edge burst
+    // is rejected by span no matter how much data survives. Mid-bin bursts are
+    // rejected by the gap rule for the same reason. Only scattered loss is
+    // recoverable, which is exactly what this change buys and no more.
+    const stride = Math.max(2, Math.floor(148 / badFramesPerBin));
+    return ambientFaceFrames(70_000, 30, (frame, index) => {
+      const positionInBin = index % 150;
+      const dropped =
+        positionInBin > 0 &&
+        positionInBin < 149 &&
+        positionInBin % stride === 0;
+      return dropped
+        ? { pose: { yawDegrees: 18, pitchDegrees: 2, rollDegrees: 1 } }
+        : {};
+    });
+  }
+
+  it("accepts a bin that keeps enough analyzed data", () => {
+    // 15 of 150 frames lost: 135 remain, about 4.5 s of the 5 s bin, clearing
+    // minimumDataPerBinMs. The all-or-nothing rule discarded this entirely.
+    const result = extractAmbientFaceMetrics(withExcursions(15), OPTIONS);
+    const measured = result.outcomes.filter(
+      (outcome) => outcome.status === "measured"
+    );
+    expect(measured.length).toBeGreaterThan(0);
+  });
+
+  it("still rejects a bin that lost too much of its data", () => {
+    // Every other frame lost: about 2.5 s of a 5 s bin, well under the 4 s the
+    // pack requires. The threshold is the published requirement, not a new
+    // constant.
+    const result = extractAmbientFaceMetrics(withExcursions(74), OPTIONS);
+    const eyeLeft = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.eye_aperture.left"
+    );
+    expect(eyeLeft?.status).toBe("withheld");
+  });
+
+  it("measures only from frames that individually passed the pose gate", () => {
+    // The retained frames are all pose-valid, so geometry stays sound; the bin
+    // simply rests on less of it. A bin's sample count must reflect what was
+    // actually used, not what arrived.
+    const result = extractAmbientFaceMetrics(withExcursions(15), OPTIONS);
+    const eyeLeft = result.outcomes.find(
+      (outcome) => outcome.code === "ambient.face.eye_aperture.left"
+    );
+    expect(eyeLeft?.status).toBe("measured");
+    expect(eyeLeft?.evidence.samplesPerBin).toBeLessThan(150);
+    expect(eyeLeft?.evidence.samplesPerBin).toBeGreaterThanOrEqual(
+      80
+    );
   });
 });
