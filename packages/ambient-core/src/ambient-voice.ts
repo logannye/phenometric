@@ -161,8 +161,9 @@ export function voiceFrameGateFailures(frame: AmbientVoiceFrame): string[] {
       Math.abs(frame.dcOffset) > AMBIENT_VOICE_MAX_ABSOLUTE_DC_OFFSET) {
     reasons.push("dc-offset");
   }
+  // Speech SNR is NOT a timing gate. See timingFrameUsable.
   if (active && (!finite(frame.snrDb) || frame.snrDb < AMBIENT_VOICE_MIN_SPEECH_SNR_DB)) {
-    reasons.push("speech-snr");
+    reasons.push("speech-snr-pitch-only");
   }
   const blocking = frame.qualityReasons.filter((reason) =>
     FRAME_BLOCKING_REASONS.has(reason)
@@ -193,9 +194,22 @@ function timingFrameUsable(frame: AmbientVoiceFrame): boolean {
     finite(frame.dcOffset) &&
     Math.abs(frame.dcOffset) <=
       AMBIENT_VOICE_MAX_ABSOLUTE_DC_OFFSET &&
-    (!active ||
-      (finite(frame.snrDb) &&
-        frame.snrDb >= AMBIENT_VOICE_MIN_SPEECH_SNR_DB)) &&
+    /*
+     * Speech SNR is deliberately absent here.
+     *
+     * It gated segmentation, and eligibleSegments ends a segment on any
+     * unusable frame -- so scattered sub-threshold frames fragmented every
+     * segment below the 2-second minimum. Three measured sessions had 32% of
+     * speech frames below the floor, which makes a surviving segment a
+     * 1-in-10^34 event. All three reported zero segments and withheld every
+     * voice metric.
+     *
+     * The floor was also in the wrong place. It exists so f0 is not estimated
+     * from speech buried in noise -- a PITCH concern. Timing metrics need only
+     * reliable voice-activity detection, which is robust well below 15 dB, and
+     * a noisy speech frame is still evidence that speech occurred. The check
+     * now lives in validPitch, where the measurement it protects actually is.
+     */
     !frame.qualityReasons.some((reason) =>
       FRAME_BLOCKING_REASONS.has(reason)
     )
@@ -214,7 +228,11 @@ function validPitch(frame: PreparedVoiceFrame): boolean {
     finite(frame.frame.f0Confidence) &&
     frame.frame.f0Confidence >= AMBIENT_VOICE_MIN_ESTIMATOR_QUALITY &&
     finite(frame.frame.estimatorAgreement) &&
-    frame.frame.estimatorAgreement >= AMBIENT_VOICE_MIN_ESTIMATOR_AGREEMENT
+    frame.frame.estimatorAgreement >= AMBIENT_VOICE_MIN_ESTIMATOR_AGREEMENT &&
+    // Moved here from the timing gate: estimating f0 from speech buried in
+    // noise is what this floor was always for.
+    finite(frame.frame.snrDb) &&
+    frame.frame.snrDb >= AMBIENT_VOICE_MIN_SPEECH_SNR_DB
   );
 }
 

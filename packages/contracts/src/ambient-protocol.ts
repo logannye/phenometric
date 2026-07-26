@@ -43,10 +43,10 @@ const rawProtocolPack = {
   // 3.0.0: brow geometry and per-eye closure added (5 face metrics).
   // Sessions measured under different packs are not comparable, and the
   // content digest below makes that structurally visible rather than implicit.
-  version: "3.2.0",
+  version: "3.3.0",
   // SHA-256 of the canonical pack content with this field omitted.
   contentSha256:
-    "b12f5977a9bc1b23bbafbe6b01c5a5c9b4d535fa9ae2dd4fe5722ea49624ad11",
+    "3911909a6f5d7cd0592d2dfe41a0c5a81ea7ef1f0fb6acad50c220ecca97aa9c",
   status: "nonclinical-prototype",
   maximumSessionDurationMs: 300_000,
   supportedTarget: {
@@ -136,7 +136,7 @@ const rawProtocolPack = {
       reportSection: "pitch",
       reportOrder: 0,
       algorithmId: "ambient-f0",
-      algorithmVersion: "1.0.0",
+      algorithmVersion: "1.1.0",
       evidenceRequirements: {
         minimumSegments: 3,
         minimumPitchedDurationMs: 10_000,
@@ -164,7 +164,7 @@ const rawProtocolPack = {
       reportSection: "pitch",
       reportOrder: 1,
       algorithmId: "ambient-f0-variability",
-      algorithmVersion: "1.0.0",
+      algorithmVersion: "1.1.0",
       evidenceRequirements: {
         minimumSegments: 3,
         minimumPitchedDurationMs: 10_000,
@@ -219,7 +219,7 @@ const rawProtocolPack = {
       reportSection: "speech-timing",
       reportOrder,
       algorithmId,
-      algorithmVersion: "1.0.0",
+      algorithmVersion: "1.1.0",
       evidenceRequirements: {
         minimumSegments: 3,
         minimumEligibleSpanMs: 30_000,
@@ -253,7 +253,7 @@ const rawProtocolPack = {
       reportSection: "speech-timing",
       reportOrder: 4,
       algorithmId: "ambient-acoustic-nuclei",
-      algorithmVersion: "1.0.0",
+      algorithmVersion: "1.1.0",
       evidenceRequirements: {
         minimumSegments: 3,
         minimumEligibleSpanMs: 30_000,
